@@ -18,6 +18,13 @@ Routes:
                                     profile/preset target (FR-6a)
   - POST /api/plugins/hapm/addons/enable   enable an addon on a profile (FR-6b)
   - POST /api/plugins/hapm/addons/disable  disable an addon on a profile (FR-6c)
+  - GET  /api/plugins/hapm/presets  list available presets from the registry
+                                    (FR-4)
+  - POST /api/plugins/hapm/apply    apply a preset to a target profile with a
+                                    whitelisted config merge, backing up first
+                                    (FR-4)
+  - POST /api/plugins/hapm/revert   revert the last preset apply, restoring the
+                                    pre-apply state byte-exactly (FR-4/FR-7)
 
 IMPORTANT: plugin API routes are mounted only when the dashboard process
 starts. After installing or updating this plugin you must restart
@@ -35,7 +42,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
-# The FR-6/FR-7 engine lives in the ``hapm`` package next to this module. Make
+# The HAPM engine lives in the ``hapm`` package next to this module. Make
 # it importable whether the dashboard adds ``dashboard/`` to sys.path or not.
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
@@ -54,6 +61,8 @@ from hapm import (  # noqa: E402
     list_active_addons,
     load_addon,
 )
+from hapm import apply as hapm_apply  # noqa: E402
+from hapm.apply import ApplyError, WhitelistError  # noqa: E402
 
 # The dashboard mounts this router at /api/plugins/hapm/ at process start.
 router = APIRouter()
@@ -516,3 +525,160 @@ def profile_status(profile: str):
         "active_preset": active_preset,
         "addons": addons,
     }
+
+
+# ---------------------------------------------------------------------------
+# FR-4: preset apply/revert endpoints
+# ---------------------------------------------------------------------------
+
+
+def _resolve_profile_dir(profile: str) -> Path | None:
+    """Resolve a profile name to its directory under ``$HERMES_HOME/profiles``.
+
+    Returns the directory ``Path`` when it exists, or ``None`` when the profile
+    name is invalid or the directory is absent. The name is validated to be a
+    single path segment so a request can never escape the profiles root.
+    """
+    if not profile or "/" in profile or "\\" in profile or profile in (".", ".."):
+        return None
+    candidate = _hermes_home() / "profiles" / profile
+    return candidate if candidate.is_dir() else None
+
+
+@router.get("/presets")
+def list_presets():
+    """List available presets from the registry (FR-4).
+
+    Reachable at ``GET /api/plugins/hapm/presets``. Returns each preset's
+    registry metadata (slug, name, description, version, path) so the UI can
+    present a preset picker. No profile is touched by this listing.
+    """
+    presets = [p.to_dict() for p in hapm_apply.list_presets()]
+    return {
+        "presets_dir": str(hapm_apply.default_presets_root()),
+        "presets": presets,
+    }
+
+
+@router.post("/apply")
+def apply_preset(payload: dict = Body(...)):
+    """Apply a preset to a target profile (FR-4).
+
+    Reachable at ``POST /api/plugins/hapm/apply`` with a JSON body::
+
+        {"profile": "<profile-name>", "preset": "<preset-slug>"}
+
+    Overwrites the profile's ``SOUL.md`` and ``skills/`` from the preset and
+    merges only the OQ-2-whitelisted keys into its ``config.yaml`` — after
+    backing up the prior state via the FR-7 engine so the change is fully
+    reversible. The pre-apply backup id and active preset are recorded in the
+    profile's ``hapm.lock``.
+
+    Errors are structured JSON (never a 500 stack trace):
+      - ``missing_field`` (400) when profile/preset is absent.
+      - ``unknown_profile`` (404) when the profile directory does not exist.
+      - ``whitelist_violation`` (422) when the preset fragment touches a
+        non-whitelisted config key (nothing is written).
+      - ``apply_failed`` (400) for any other apply error (unknown preset, bad
+        layout, IO).
+    """
+    profile = str(payload.get("profile", "")).strip()
+    preset = str(payload.get("preset", "")).strip()
+    if not profile or not preset:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "missing_field",
+                "message": "both 'profile' and 'preset' are required.",
+            },
+        )
+
+    profile_dir = _resolve_profile_dir(profile)
+    if profile_dir is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "unknown_profile",
+                "message": f"profile not found: {profile!r}",
+                "profile": profile,
+            },
+        )
+
+    try:
+        result = hapm_apply.apply_preset(profile_dir, preset)
+    except WhitelistError as exc:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "whitelist_violation",
+                "message": str(exc),
+                "profile": profile,
+                "preset": preset,
+            },
+        )
+    except ApplyError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "apply_failed",
+                "message": str(exc),
+                "profile": profile,
+                "preset": preset,
+            },
+        )
+
+    return {"status": "applied", **result.to_dict()}
+
+
+@router.post("/revert")
+def revert_preset(payload: dict = Body(...)):
+    """Revert the last preset apply on a profile (FR-4/FR-7).
+
+    Reachable at ``POST /api/plugins/hapm/revert`` with a JSON body::
+
+        {"profile": "<profile-name>"}
+
+    Restores ``SOUL.md``, ``skills/`` and ``config.yaml`` byte-exactly from the
+    backup captured at apply time, clears the active preset from ``hapm.lock``
+    and deletes the consumed backup.
+
+    Errors are structured JSON:
+      - ``missing_field`` (400) when profile is absent.
+      - ``unknown_profile`` (404) when the profile directory does not exist.
+      - ``revert_failed`` (400) when there is no active preset / no backup.
+    """
+    profile = str(payload.get("profile", "")).strip()
+    if not profile:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "missing_field",
+                "message": "'profile' is required.",
+            },
+        )
+
+    profile_dir = _resolve_profile_dir(profile)
+    if profile_dir is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "unknown_profile",
+                "message": f"profile not found: {profile!r}",
+                "profile": profile,
+            },
+        )
+
+    try:
+        result = hapm_apply.revert_preset(profile_dir)
+    except ApplyError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "revert_failed",
+                "message": str(exc),
+                "profile": profile,
+            },
+        )
+
+    return {"status": "reverted", **result}
+
