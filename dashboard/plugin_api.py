@@ -53,13 +53,16 @@ from hapm import (  # noqa: E402
     AddonConflictError,
     AddonNotCompatibleError,
     AddonNotEnabledError,
+    ConflictResult,
     RegistryError,
+    ResolutionError,
     ToggleError,
     compatible_addons,
     disable_addon,
     enable_addon,
     list_active_addons,
     load_addon,
+    resolve_and_enable_addon,
 )
 from hapm import apply as hapm_apply  # noqa: E402
 from hapm.apply import ApplyError, WhitelistError  # noqa: E402
@@ -295,6 +298,11 @@ def enable_addon_route(payload: dict = Body(...)):
       - ``addon_not_found`` (404) when the addon slug is unknown.
       - ``not_compatible`` (409) when the target is not in the whitelist.
       - ``conflict`` (409) when the SOUL block collides (FR-6 conflict rule).
+      - ``addon_conflict`` (409) when enabling would collide with an active
+        addon declared in ``conflicts_with`` (FR-7 v1.1). The body carries the
+        structured conflict object (list of colliding active addons + reason)
+        the frontend popup consumes; nothing is mutated. Guided resolution is
+        opt-in via ``POST /addons/resolve``.
       - ``already_enabled`` (409) when the addon is already active.
     """
     profile, addon_id = _resolve_enable_inputs(payload)
@@ -338,6 +346,21 @@ def enable_addon_route(payload: dict = Body(...)):
     except (RegistryError, ToggleError) as exc:
         return _err(400, "enable_failed", str(exc), addon=addon_id)
 
+    # Report-only default (FR-7 v1.1): a conflict returns a structured object
+    # and mutates nothing. Surface it as a 409 the frontend popup consumes.
+    if isinstance(result, ConflictResult):
+        return _err(
+            409,
+            "addon_conflict",
+            f"Enabling {addon_id!r} conflicts with active addon(s): "
+            f"{result.conflicting_ids}. Confirm guided resolution via "
+            f"POST /addons/resolve to disable them (reversibly) and enable "
+            f"{addon_id!r}.",
+            addon=addon_id,
+            target=target,
+            conflict=result.to_dict(),
+        )
+
     return {
         "profile": profile,
         "addon": result.addon_id,
@@ -346,6 +369,93 @@ def enable_addon_route(payload: dict = Body(...)):
         "soul_block": result.soul_block,
         "skill_paths": result.skill_paths,
         "lock_path": result.lock_path,
+    }
+
+
+@router.post("/addons/resolve")
+def resolve_addon_route(payload: dict = Body(...)):
+    """Confirmed guided conflict resolution (FR-7 v1.1).
+
+    This is the **opt-in** counterpart to ``/addons/enable``: it is called only
+    after the user has confirmed (in the frontend popup) that the colliding
+    addons may be disabled. It disables each colliding active addon **via the
+    FR-7 reversible mechanics** and then enables the target addon — atomically,
+    with rollback on partial failure.
+
+    Body (JSON):
+      - ``profile`` (required): target profile name under ``$HERMES_HOME``.
+      - ``addon`` (required): addon id to enable.
+      - ``target`` (optional): whitelist match target; defaults to ``profile``.
+      - ``mode`` (optional): selected mode id for a modal addon.
+
+    Returns the final activation state plus the list of addons that were
+    disabled to clear the conflict, or a structured error:
+      - ``bad_request`` (400) for missing fields.
+      - ``profile_not_found`` (404) when the profile dir is missing.
+      - ``addon_not_found`` (404) when the addon slug is unknown.
+      - ``not_compatible`` (409) when the target is not in the whitelist.
+      - ``conflict`` (409) when the SOUL block collides (FR-6 conflict rule).
+      - ``already_enabled`` (409) when the addon is already active.
+      - ``resolution_failed`` (500) when the target enable failed and rollback
+        could not fully restore a previously-disabled addon (recover from the
+        FR-7 backups; the message names what could not be restored).
+    """
+    profile, addon_id = _resolve_enable_inputs(payload)
+    if not profile or not addon_id:
+        return _err(
+            400,
+            "bad_request",
+            "Both 'profile' and 'addon' are required in the request body.",
+        )
+    target = str(payload.get("target", "")).strip() or profile
+    mode = payload.get("mode")
+    mode_id = str(mode).strip() if mode not in (None, "") else None
+
+    pdir = _profile_dir(profile)
+    if not pdir.is_dir():
+        return _err(
+            404,
+            "profile_not_found",
+            f"Profile directory not found: {pdir}",
+            profile=profile,
+        )
+
+    addons_root = _addons_root()
+    addon_dir = addons_root / addon_id
+    if not (addon_dir / "manifest.json").is_file():
+        return _err(
+            404,
+            "addon_not_found",
+            f"No addon with id {addon_id!r} in the registry.",
+            addon=addon_id,
+        )
+
+    try:
+        addon = load_addon(addon_dir)
+        resolution = resolve_and_enable_addon(
+            pdir, addon, target=target, addons_root=addons_root, mode_id=mode_id
+        )
+    except AddonNotCompatibleError as exc:
+        return _err(409, "not_compatible", str(exc), addon=addon_id, target=target)
+    except AddonConflictError as exc:
+        return _err(409, "conflict", str(exc), addon=addon_id)
+    except AddonAlreadyEnabledError as exc:
+        return _err(409, "already_enabled", str(exc), addon=addon_id)
+    except ResolutionError as exc:
+        return _err(500, "resolution_failed", str(exc), addon=addon_id)
+    except (RegistryError, ToggleError) as exc:
+        return _err(400, "resolve_failed", str(exc), addon=addon_id)
+
+    result = resolution.result
+    return {
+        "profile": profile,
+        "addon": result.addon_id,
+        "mode": result.mode,
+        "enabled": result.enabled,
+        "soul_block": result.soul_block,
+        "skill_paths": result.skill_paths,
+        "lock_path": result.lock_path,
+        "disabled": resolution.disabled,
     }
 
 

@@ -45,6 +45,7 @@ addons/
 | `contributes.soul_block`       | bool              | yes      | `true` if the addon inserts a SOUL.md block from `soul_block.md`. |
 | `contributes.skills`           | bool              | yes      | `true` if the addon ships skills under `skills/`. |
 | `compatible_profiles_or_presets` | string[]        | yes      | Whitelist of profile names and/or preset slugs this addon may activate on. `"*"` means "any". The UI only offers the addon where this matches. |
+| `conflicts_with`               | string[]          | no       | Declarative **addon↔addon** incompatibility (FR-7 v1.1): addon ids that must be *inactive* before this addon may be enabled. Distinct from `compatible_profiles_or_presets` (which is addon↔profile/preset). Defaults to `[]`. See below. |
 | `modes`                        | mode[]            | no       | Optional list of mutually-exclusive modes (see below). Omit for single-behaviour addons. |
 
 ### `modes[]` (optional)
@@ -96,6 +97,52 @@ live under `addons/<slug>/skills/<skill-name>/SKILL.md`, following the standard
 Hermes skill layout. The FR-7 engine copies these into the profile's skills on
 activation and removes them on deactivation, backing up any pre-existing
 same-named skill so it is restored on removal.
+
+## Addon↔addon conflicts (`conflicts_with`, FR-7 v1.1)
+
+`conflicts_with` is an optional list of **addon ids** that must be *inactive*
+on the target profile before this addon may be enabled. It expresses a
+declarative addon↔addon incompatibility and is completely separate from the
+FR-5 `compatible_profiles_or_presets` whitelist (addon↔profile/preset).
+
+Semantics (implemented by the FR-6 enable engine on top of the FR-7
+reversibility primitives):
+
+- **Report-only default (PRD v1 Non-Goal):** when enabling an addon whose
+  `conflicts_with` names one or more *currently active* addons, the engine does
+  **not** mutate anything and instead returns a structured conflict object
+  (the colliding active addons + a human-readable reason) that the frontend
+  popup consumes. This preserves the v1 report-only behaviour as the default.
+- **Guided resolution (opt-in):** on an explicit, confirmed API call the engine
+  disables the colliding addons **through the same FR-7 marked-block / backup /
+  lock mechanics** (exactly reversible — no bypass) and then enables the target
+  addon. The whole operation is atomic: if enabling the target fails after some
+  colliders were disabled, every disabled addon is re-enabled (rolled back) to
+  its prior mode, restoring the pre-call state.
+
+Rules:
+
+- Entries are addon-id strings following the same slug rules as `id`.
+- An addon MUST NOT list itself in `conflicts_with`.
+- A referenced addon id need **not** be installed — a conflict target that is
+  absent simply never collides. `validate.py` therefore checks structure only,
+  not cross-addon existence.
+- The relationship is evaluated at *enable time* against the profile's live
+  `hapm.lock`; it is not required to be symmetric (declare it on both addons if
+  you want the block to apply in both directions).
+
+Example:
+
+```json
+{
+  "id": "addon-b",
+  "conflicts_with": ["addon-a"]
+}
+```
+
+Enabling `addon-b` while `addon-a` is active yields a conflict object listing
+`addon-a`; confirming guided resolution disables `addon-a` (reversibly) and
+then enables `addon-b`.
 
 ## Validation
 

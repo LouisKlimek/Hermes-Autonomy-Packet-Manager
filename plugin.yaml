@@ -1,0 +1,10 @@
+name: hapm
+version: 0.1.0
+description: "Agent half of the Hermes Autonomy Packet Manager (HAPM). Pairs with the HAPM dashboard plugin in dashboard/ to make HAPM a full Hermes plugin (agent + dashboard), discoverable and enable-able by the agent plugin loader. v1 is a structural no-op skeleton: register() runs no hooks and applies no profile mutation."
+author: Louis Klimek
+# v1 deliberately declares (and registers) NO kanban lifecycle hooks. The agent
+# half is a structural no-op skeleton so HAPM is recognized as a full plugin
+# without any behavioral side effects. Agent-tools / auto-hooks that apply
+# presets or addons to profiles are a separate, human-gated product decision and
+# are NOT part of this version.
+# hooks: []
