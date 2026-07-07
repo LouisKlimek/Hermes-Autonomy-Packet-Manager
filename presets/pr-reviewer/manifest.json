@@ -1,0 +1,14 @@
+{
+  "slug": "pr-reviewer",
+  "name": "PR Reviewer",
+  "description": "Reviews pull requests for correctness, risk, and quality; approves or requests changes but never merges.",
+  "version": "1.0.0",
+  "compatibleAddons": [
+    "*"
+  ],
+  "markers": [
+    "github",
+    "review",
+    "quality-gate"
+  ]
+}

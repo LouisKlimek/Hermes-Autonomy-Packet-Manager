@@ -1,0 +1,16 @@
+# General-Config fragment for the GitHub Manager preset.
+# Only whitelisted, role-defining keys (OQ-2, CEO-confirmed). Merge/patch fragment only.
+agent:
+  max_turns: 30
+  reasoning_effort: medium
+  disabled_toolsets: []
+toolsets:
+  - file
+  - terminal
+  - web
+delegation:
+  enabled: false
+kanban:
+  default_assignee: github-manager
+approvals:
+  mode: auto

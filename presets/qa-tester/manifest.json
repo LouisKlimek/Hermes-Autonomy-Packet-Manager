@@ -1,0 +1,14 @@
+{
+  "slug": "qa-tester",
+  "name": "QA Tester",
+  "description": "Exercises applications and code to find bugs, verify acceptance criteria, and produce evidence-backed test reports.",
+  "version": "1.0.0",
+  "compatibleAddons": [
+    "*"
+  ],
+  "markers": [
+    "qa",
+    "testing",
+    "verification"
+  ]
+}
