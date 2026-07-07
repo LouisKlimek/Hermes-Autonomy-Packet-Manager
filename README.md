@@ -100,6 +100,37 @@ Verification (documented in `dashboard/test_status_endpoint.py`): apply a
 preset + enable 2 addons, call status and confirm it matches; disable 1 addon,
 call status again, confirm it updated — proving reads are never stale.
 
+## State engine (FR-7)
+
+The reversibility engine lives in `dashboard/hapm/` as a pure filesystem
+library (no network, no dashboard coupling) that the later apply/revert
+endpoints (FR-4 / FR-6) build on:
+
+- `state.py` — per-profile `hapm.lock` record (active preset, active addons +
+  modes, backup markers) with atomic read/write.
+- `backup.py` — `BackupStore`: snapshot/restore `SOUL.md`, `skills/`, and
+  `config.yaml` byte-exactly under `profiles/<profile>/.hapm/backups/<id>/`.
+- `soul_blocks.py` — insert/replace/remove addon SOUL.md contributions inside
+  `<!-- HAPM:addon:<id> START/END -->` markers without touching surrounding
+  user text.
+- `skills_tracker.py` — track addon-added skills distinctly from pre-existing
+  same-named skills it shadows, so disabling removes only what was added and
+  restores any shadowed original.
+- `index.py` — optional central index at `$HERMES_HOME/hapm_index.json` for
+  cross-profile status queries (OQ-3) without scanning every profile.
+
+Run the tests:
+
+```bash
+python -m pytest dashboard/tests           # with pytest installed
+python dashboard/tests/test_state_engine.py  # stdlib-only fallback runner
+```
+
+The key guarantee is proven by
+`test_full_apply_then_revert_is_byte_identical`: apply a preset, toggle addons,
+then fully revert — `SOUL.md` / `config.yaml` / `skills/` return byte-identical
+to the pre-change state.
+
 ## License
 
 MIT.
