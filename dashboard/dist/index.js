@@ -5,18 +5,26 @@
  * (window.__HERMES_PLUGIN_SDK__) and registers a single sidebar-tab view via
  * window.__HERMES_PLUGINS__.register(...).
  *
- * This build implements HAPM task t_a380191e — the left-hand profile selector
- * and the right-hand "current preset + preset switcher" panel, per the
- * designer's UX spec (HAPM_UX_SPEC.md §2 layout, §3 profile selector, §4 preset
- * section + confirmation dialog, §6.1/§6.2 error states, §7 restart notice).
+ * This build combines two HAPM frontend tasks in one file (single-file plugin):
+ *   - t_a380191e: left-hand profile selector + right-hand preset switcher panel
+ *     (§2 layout, §3 profile selector, §4 preset section + confirmation dialog,
+ *      §6.1/§6.2 error states, §7 restart notice). Delivered on the base branch.
+ *   - t_8b337378 (THIS task): §5 addon toggle/mode UI (compatible-addon list,
+ *     on/off toggles, segmented mode control) + §8 FR-9 status view (active
+ *     preset + all active addons with mode). Layered on top of the base branch.
  *
- * UI language is German (de-DE) per the designer's OQ-4 decision — all
- * user-facing copy below is hardcoded German verbatim from the spec.
+ * UI language is German (de-DE) per the designer's OQ-4 decision. NOTE: the
+ * designer's HAPM_UX_SPEC.md artifact was lost to scratch-workspace resets and
+ * could not be re-read for this task; the §5/§8 German copy strings below follow
+ * the designer's documented decisions (German, YAGNI 3-segment Ponytail/Prompt/
+ * Aus control with Ponytail disabled per the Human Gate) and the house style of
+ * the already-merged §2–§4/§6/§7 copy. Reviewers should reconcile the exact §5/§8
+ * wording against the spec if it is recovered.
  *
- * The addon toggle/mode section (§5) and the full status view (§8) belong to a
- * sibling task (t_8b337378) and are intentionally NOT implemented here; a small
- * read-only "active preset" summary is shown as part of the preset panel so the
- * selected profile's state is visible.
+ * YAGNI Modus A ("Ponytail") is human-gated (kanban t_f321af09) and NOT
+ * implemented: it renders as a visibly DISABLED segment and is NEVER wired to a
+ * backend call. The backend manifest does not return it; it is appended locally,
+ * greyed, purely presentational.
  *
  * Backend contracts consumed (mounted at /api/plugins/hapm/):
  *   GET  /profiles                      -> { profiles_dir, profiles:[{name,path}] }
@@ -28,6 +36,17 @@
  *                                          or structured error bodies
  *                                          (400 missing_field, 404 unknown_profile,
  *                                           422 whitelist_violation, 400 apply_failed).
+ *   GET  /addons?target=<p>&profile=<p>  -> { target, addons_root, addons:[{ id,
+ *                                            name, description, version,
+ *                                            contributes, modes:[{id,name,
+ *                                            description,contributes,default}],
+ *                                            compatible_profiles_or_presets,
+ *                                            enabled }] }  (FR-6a)
+ *   POST /addons/enable  {profile,addon,target?,mode?} -> {...enabled:true...}
+ *                                          err: not_compatible(409), conflict(409),
+ *                                          already_enabled(409), *_not_found(404).
+ *   POST /addons/disable {profile,addon}  -> {...enabled:false...}
+ *                                          err: not_enabled(409), *_not_found(404).
  *
  * NOTE: /presets and /apply (FR-4) are provided by a sibling backend PR that
  * mounts them at these paths; this frontend is written against that documented
@@ -98,7 +117,97 @@
       "Presets und Addons konnten nicht geladen werden, da das Repository `LouisKlimek/Hermes-Autonomy-Packet-Manager` gerade nicht erreichbar ist. Prüfe deine Internetverbindung oder GitHub-Zugangsdaten.",
     // Error §6.2 profile not writable
     notWritableTitle: "Profil nicht beschreibbar",
+
+    // --- §5 Addon section ------------------------------------------------
+    addonsHeader: "Addons",
+    addonsIntro:
+      "Umkehrbare Verhaltens-Addons für dieses Profil. Es werden nur Addons angezeigt, die mit dem aktiven Preset bzw. Profil kompatibel sind.",
+    addonsLoading: "Addons werden geladen …",
+    addonsEmpty: "Keine kompatiblen Addons für dieses Profil.",
+    addonsEmptySub:
+      "Für das aktive Preset dieses Profils sind derzeit keine kompatiblen Addons verfügbar.",
+    addonsLoadError: "Addons konnten nicht geladen werden",
+    addonsLoadErrorSub: "Bitte erneut versuchen.",
+    addonOn: "An",
+    addonOff: "Aus",
+    addonModeLabel: "Modus",
+    // Error: addon incompatible (backend `not_compatible`, 409) §6.3
+    addonIncompatibleTitle: "Addon nicht kompatibel",
+    // Error: addon conflict (backend `conflict`, 409) §6.4
+    addonConflictTitle: "Addon-Konflikt",
+    addonToggleUnknownError:
+      "Das Addon konnte nicht umgeschaltet werden (unbekannter Fehler).",
+    // YAGNI Modus A placeholder — Human Gate (t_f321af09): shown, disabled,
+    // never wired to a backend call.
+    ponytailLabel: "Ponytail",
+    ponytailDisabledHint:
+      "„Ponytail“ (Modus A) ist noch nicht verfügbar und für dieses Release deaktiviert.",
+
+    // --- §8 Status view --------------------------------------------------
+    statusViewHeader: "Aktueller Zustand",
+    statusActivePresetLabel: "Aktives Preset",
+    statusNoPreset: "Kein Preset angewendet",
+    statusActiveAddonsLabel: "Aktive Addons",
+    statusNoAddons: "Keine aktiven Addons",
+    statusModePrefix: "Modus: ",
   };
+
+  function addonIncompatibleBody(addonName, target) {
+    return (
+      "Das Addon „" +
+      addonName +
+      "\" ist nicht mit „" +
+      target +
+      "\" kompatibel und kann für dieses Profil nicht aktiviert werden. " +
+      "Kompatible Addons richten sich nach der Whitelist des jeweiligen Addons."
+    );
+  }
+
+  function addonConflictBody(addonName) {
+    return (
+      "Das Addon „" +
+      addonName +
+      "\" steht im Konflikt mit einem bereits aktiven Addon oder einem vorhandenen SOUL-Block und wurde nicht aktiviert. " +
+      "Deaktiviere das kollidierende Addon und versuche es erneut."
+    );
+  }
+
+  // Build the correct §6.3/§6.4 error banner for a failed addon toggle. `Banner`
+  // is defined below; this returns an element that references it lazily at
+  // render time, so definition order does not matter.
+  function addonToggleErrorNode(err, addon, target) {
+    var name = (addon && (addon.name || addon.id)) || "";
+    if (isNetworkFailure(err)) {
+      return h(
+        Banner,
+        { variant: "danger", title: COPY.repoUnreachableTitle },
+        COPY.repoUnreachableBody
+      );
+    }
+    var code = err && err.body && err.body.error;
+    if (code === "not_compatible") {
+      return h(
+        Banner,
+        { variant: "warn", title: COPY.addonIncompatibleTitle },
+        addonIncompatibleBody(name, target)
+      );
+    }
+    if (code === "conflict") {
+      return h(
+        Banner,
+        { variant: "warn", title: COPY.addonConflictTitle },
+        addonConflictBody(name)
+      );
+    }
+    var msg =
+      (err && err.body && (err.body.message || err.body.error)) ||
+      COPY.addonToggleUnknownError;
+    return h(
+      Banner,
+      { variant: "danger", title: COPY.addonsLoadError },
+      msg
+    );
+  }
 
   function presetNotWritableBody(profile) {
     return (
@@ -815,30 +924,539 @@
   // Small read-only status summary (active-preset line only; the full FR-9
   // status view with per-addon controls is owned by sibling task t_8b337378).
   // ---------------------------------------------------------------------------
-  function StatusSummary(props) {
-    var status = props.status;
-    var presetLine =
-      status && status.active_preset
-        ? status.active_preset
-        : COPY.noPresetApplied;
+  // (StatusSummary was replaced by the fuller §8 StatusView above.)
+
+  // ---------------------------------------------------------------------------
+  // §5 Addon section — compatible-addon list with on/off toggle and (for
+  // multi-mode addons like YAGNI) a segmented mode control. Wired to the FR-6
+  // /addons listing + /addons/enable + /addons/disable endpoints.
+  //
+  // Backend contract (FR-6):
+  //   GET  /addons?target=<profile>&profile=<profile>
+  //        -> { target, addons_root, addons: [{ id, name, description, version,
+  //             contributes, modes:[{id,name,description,contributes,default}],
+  //             compatible_profiles_or_presets, enabled }] }
+  //   POST /addons/enable  { profile, addon, target?, mode? }
+  //   POST /addons/disable { profile, addon }
+  //
+  // YAGNI Modus A ("Ponytail") is human-gated (t_f321af09) and NOT implemented:
+  // it is rendered as a visibly disabled segment and is NEVER wired to a backend
+  // call. The backend manifest does not return it; we append it locally, greyed.
+  // ---------------------------------------------------------------------------
+
+  // Addons for which the spec places a disabled future-mode placeholder. Keyed
+  // by addon id -> { label, hint }. Purely presentational; never sent to the API.
+  var DISABLED_MODE_PLACEHOLDERS = {
+    yagni: { id: "ponytail", label: COPY.ponytailLabel, hint: COPY.ponytailDisabledHint },
+  };
+
+  function SegmentedControl(props) {
+    // props: segments [{key,label,disabled,hint,active}], onSelect(key), busy
+    return h(
+      "div",
+      {
+        role: "group",
+        "aria-label": COPY.addonModeLabel,
+        style: {
+          display: "inline-flex",
+          border: "1px solid " + C.border,
+          borderRadius: 8,
+          overflow: "hidden",
+        },
+      },
+      props.segments.map(function (seg, i) {
+        var isActive = seg.active;
+        return h(
+          "button",
+          {
+            key: seg.key,
+            type: "button",
+            disabled: !!seg.disabled || props.busy || isActive,
+            title: seg.hint || undefined,
+            aria: seg.disabled ? "true" : undefined,
+            "aria-disabled": seg.disabled ? "true" : undefined,
+            "aria-pressed": isActive ? "true" : "false",
+            onClick: function () {
+              if (seg.disabled || props.busy || isActive) return;
+              props.onSelect(seg.key);
+            },
+            style: {
+              fontSize: 12.5,
+              fontWeight: 600,
+              padding: "6px 12px",
+              border: "none",
+              borderLeft: i === 0 ? "none" : "1px solid " + C.border,
+              cursor: seg.disabled
+                ? "not-allowed"
+                : isActive || props.busy
+                ? "default"
+                : "pointer",
+              background: isActive ? C.accent : "transparent",
+              color: isActive
+                ? "#0b1220"
+                : seg.disabled
+                ? C.textDim
+                : C.text,
+              opacity: seg.disabled ? 0.5 : 1,
+              fontFamily: "inherit",
+            },
+          },
+          seg.label
+        );
+      })
+    );
+  }
+
+  function AddonRow(props) {
+    // props: addon, profile, target, busy, activeMode, onEnable(addon, modeId),
+    //        onDisable(addon)
+    var addon = props.addon;
+    var enabled = !!addon.enabled;
+    var modes = addon.modes || [];
+    var placeholder = DISABLED_MODE_PLACEHOLDERS[addon.id];
+
+    // "Real" (selectable) non-off modes, e.g. YAGNI's "Prompt".
+    var realModes = modes.filter(function (m) {
+      return m && m.id && m.id !== "off";
+    });
+    // Whether this addon has an explicit "off" mode declared in its manifest.
+    var hasOffMode = modes.some(function (m) {
+      return m && m.id === "off";
+    });
+
+    // A "modal" addon is one the user picks a MODE for via a segmented control
+    // (rather than a bare on/off switch). That's the case when there's more than
+    // one selectable mode, or exactly one selectable mode plus a disabled
+    // placeholder segment (e.g. YAGNI: Ponytail[disabled]/Prompt/Aus).
+    var isModal = realModes.length > 1 || (realModes.length >= 1 && !!placeholder);
+
+    // Current mode: prefer the live status-provided active mode, else the addon's
+    // default mode, else the first real mode.
+    var defaultMode =
+      (realModes.filter(function (m) {
+        return m.default;
+      })[0] || realModes[0] || {}).id;
+    var activeMode = props.activeMode || defaultMode;
+
+    var children = [
+      // Header: name + description. The on/off switch is only shown for simple
+      // (non-modal) addons; modal addons are driven by the segmented control
+      // below (its "Aus" segment is the off state).
+      h(
+        "div",
+        {
+          key: "hdr",
+          style: {
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+          },
+        },
+        h(
+          "div",
+          { style: { flex: 1, minWidth: 0 } },
+          h(
+            "div",
+            { style: { fontSize: 14, fontWeight: 600 } },
+            addon.name || addon.id
+          ),
+          addon.description
+            ? h(
+                "div",
+                {
+                  style: {
+                    fontSize: 12.5,
+                    opacity: 0.7,
+                    marginTop: 3,
+                    lineHeight: 1.45,
+                  },
+                },
+                addon.description
+              )
+            : null
+        ),
+        // On/off toggle switch (simple addons only).
+        !isModal
+          ? h(
+              "button",
+              {
+                type: "button",
+                role: "switch",
+                "aria-checked": enabled ? "true" : "false",
+                "aria-label":
+                  (addon.name || addon.id) +
+                  " " +
+                  (enabled ? COPY.addonOn : COPY.addonOff),
+                disabled: props.busy,
+                onClick: function () {
+                  if (props.busy) return;
+                  if (enabled) props.onDisable(addon);
+                  else props.onEnable(addon, undefined);
+                },
+                style: {
+                  flex: "0 0 auto",
+                  width: 52,
+                  height: 28,
+                  borderRadius: 999,
+                  border: "1px solid " + C.border,
+                  background: enabled ? C.accent : "rgba(255,255,255,0.10)",
+                  position: "relative",
+                  cursor: props.busy ? "default" : "pointer",
+                  opacity: props.busy ? 0.6 : 1,
+                  transition: "background 0.15s",
+                  padding: 0,
+                },
+              },
+              h("span", {
+                style: {
+                  position: "absolute",
+                  top: 2,
+                  left: enabled ? 26 : 2,
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  transition: "left 0.15s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                },
+              })
+            )
+          : null
+      ),
+    ];
+
+    // Segmented mode control for modal addons (e.g. YAGNI). Segments are, in
+    // order: the disabled placeholder (if any, e.g. "Ponytail"), each real mode
+    // (e.g. "Prompt"), and finally "Aus" (off). Selecting a real mode enables
+    // the addon in that mode; selecting "Aus" disables it. The placeholder is
+    // always disabled and NEVER triggers a backend call (Human Gate).
+    if (isModal) {
+      var segments = [];
+      if (placeholder) {
+        segments.push({
+          key: "__placeholder__" + placeholder.id,
+          label: placeholder.label,
+          disabled: true,
+          hint: placeholder.hint,
+          active: false,
+        });
+      }
+      realModes.forEach(function (m) {
+        segments.push({
+          key: m.id,
+          label: m.name || m.id,
+          disabled: false,
+          active: enabled && m.id === activeMode,
+        });
+      });
+      // "Aus" / off segment — active when the addon is currently disabled.
+      segments.push({
+        key: "__off__",
+        label: COPY.addonOff,
+        disabled: false,
+        active: !enabled,
+      });
+
+      children.push(
+        h(
+          "div",
+          {
+            key: "modes",
+            style: {
+              marginTop: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            },
+          },
+          h(
+            "span",
+            { style: { fontSize: 12, fontWeight: 600, opacity: 0.7 } },
+            COPY.addonModeLabel
+          ),
+          h(SegmentedControl, {
+            segments: segments,
+            busy: props.busy,
+            onSelect: function (key) {
+              if (props.busy) return;
+              if (key === "__off__") {
+                if (enabled) props.onDisable(addon);
+                return;
+              }
+              // Real mode selected -> enable (or re-enable with new mode).
+              props.onEnable(addon, key);
+            },
+          }),
+          placeholder
+            ? h(
+                "span",
+                {
+                  style: {
+                    fontSize: 11.5,
+                    opacity: 0.6,
+                    fontStyle: "italic",
+                  },
+                },
+                placeholder.hint
+              )
+            : null
+        )
+      );
+    }
+
     return h(
       "div",
       {
         style: {
-          marginTop: 20,
-          paddingTop: 16,
+          padding: "14px 14px",
+          border: "1px solid " + C.border,
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.02)",
+          marginBottom: 10,
+        },
+      },
+      children
+    );
+  }
+
+  function AddonSection(props) {
+    // props: profile, target, addons, loading, error, errorNode, busyAddonId,
+    //        activeModes (id->mode), onEnable, onDisable, onRetry
+    var children = [
+      h(
+        "div",
+        {
+          key: "hdr",
+          style: {
+            fontSize: 13,
+            fontWeight: 700,
+            marginBottom: 4,
+            marginTop: 4,
+          },
+        },
+        COPY.addonsHeader
+      ),
+      h(
+        "div",
+        {
+          key: "intro",
+          style: {
+            fontSize: 12.5,
+            opacity: 0.7,
+            marginBottom: 12,
+            lineHeight: 1.5,
+          },
+        },
+        COPY.addonsIntro
+      ),
+    ];
+
+    // Toggle error banner (incompatibility / conflict / generic).
+    if (props.errorNode) {
+      children.push(h("div", { key: "toggleerr" }, props.errorNode));
+    }
+
+    if (props.loading) {
+      children.push(
+        h(
+          "div",
+          {
+            key: "loading",
+            style: { fontSize: 13, opacity: 0.6, padding: "8px 2px" },
+          },
+          COPY.addonsLoading
+        )
+      );
+    } else if (props.error) {
+      if (isNetworkFailure(props.error)) {
+        children.push(
+          h(
+            Banner,
+            {
+              key: "neterr",
+              variant: "danger",
+              title: COPY.repoUnreachableTitle,
+              actions: [
+                h(
+                  Button,
+                  { key: "r", kind: "secondary", onClick: props.onRetry },
+                  COPY.retry
+                ),
+              ],
+            },
+            COPY.repoUnreachableBody
+          )
+        );
+      } else {
+        children.push(
+          h(
+            Banner,
+            {
+              key: "loaderr",
+              variant: "warn",
+              title: COPY.addonsLoadError,
+              actions: [
+                h(
+                  Button,
+                  { key: "r", kind: "secondary", onClick: props.onRetry },
+                  COPY.retry
+                ),
+              ],
+            },
+            (props.error.body && props.error.body.message) ||
+              COPY.addonsLoadErrorSub
+          )
+        );
+      }
+    } else if (!props.addons || props.addons.length === 0) {
+      children.push(
+        h(
+          "div",
+          {
+            key: "empty",
+            style: {
+              padding: "14px 16px",
+              border: "1px dashed " + C.border,
+              borderRadius: 10,
+              background: "rgba(255,255,255,0.03)",
+            },
+          },
+          h(
+            "div",
+            { style: { fontSize: 13.5, fontWeight: 600 } },
+            COPY.addonsEmpty
+          ),
+          h(
+            "div",
+            { style: { fontSize: 12.5, opacity: 0.7, marginTop: 4 } },
+            COPY.addonsEmptySub
+          )
+        )
+      );
+    } else {
+      props.addons.forEach(function (addon) {
+        children.push(
+          h(AddonRow, {
+            key: addon.id,
+            addon: addon,
+            profile: props.profile,
+            target: props.target,
+            activeMode: props.activeModes ? props.activeModes[addon.id] : null,
+            busy: props.busyAddonId === addon.id,
+            onEnable: props.onEnable,
+            onDisable: props.onDisable,
+          })
+        );
+      });
+    }
+
+    return h(
+      "div",
+      {
+        style: {
+          marginTop: 22,
+          paddingTop: 18,
+          borderTop: "1px solid " + C.border,
+        },
+      },
+      children
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // §8 Status view (FR-9) — active preset + all active addons (with mode).
+  // Refreshed after every apply/toggle (the parent re-fetches status).
+  // ---------------------------------------------------------------------------
+  function StatusView(props) {
+    var status = props.status;
+    var activePreset =
+      status && status.active_preset ? status.active_preset : null;
+    var addons = (status && status.addons) || [];
+
+    return h(
+      "div",
+      {
+        style: {
+          marginTop: 22,
+          paddingTop: 18,
           borderTop: "1px solid " + C.border,
         },
       },
       h(
         "div",
-        { style: { fontSize: 13, fontWeight: 700, marginBottom: 6 } },
-        COPY.statusHeaderPrefix + props.profile
+        {
+          style: { fontSize: 13, fontWeight: 700, marginBottom: 10 },
+        },
+        COPY.statusViewHeader + " · " + props.profile
       ),
+      // Active preset line.
       h(
         "div",
-        { style: { fontSize: 13, opacity: 0.85 } },
-        COPY.activePresetLabel + presetLine
+        { style: { marginBottom: 12 } },
+        h(
+          "div",
+          { style: { fontSize: 11.5, fontWeight: 600, opacity: 0.6 } },
+          COPY.statusActivePresetLabel
+        ),
+        h(
+          "div",
+          {
+            style: {
+              fontSize: 14,
+              fontWeight: 600,
+              marginTop: 2,
+              opacity: activePreset ? 1 : 0.6,
+            },
+          },
+          activePreset || COPY.statusNoPreset
+        )
+      ),
+      // Active addons list.
+      h(
+        "div",
+        null,
+        h(
+          "div",
+          { style: { fontSize: 11.5, fontWeight: 600, opacity: 0.6 } },
+          COPY.statusActiveAddonsLabel
+        ),
+        addons.length === 0
+          ? h(
+              "div",
+              {
+                style: {
+                  fontSize: 13,
+                  opacity: 0.6,
+                  marginTop: 4,
+                },
+              },
+              COPY.statusNoAddons
+            )
+          : h(
+              "div",
+              { style: { marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 } },
+              addons.map(function (a, i) {
+                var mode = a.mode;
+                return h(
+                  "div",
+                  {
+                    key: (a.addon_id || "addon") + "_" + i,
+                    style: {
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      padding: "5px 11px",
+                      borderRadius: 999,
+                      background: "rgba(110,168,254,0.16)",
+                      border: "1px solid " + C.okBorder,
+                    },
+                  },
+                  (a.addon_id || "—") +
+                    (mode ? "  ·  " + COPY.statusModePrefix + mode : "")
+                );
+              })
+            )
       )
     );
   }
@@ -885,6 +1503,29 @@
     var toastState = useState(false);
     var toast = toastState[0];
     var setToast = toastState[1];
+
+    // §5 Addon list state (per selected profile).
+    var addonsState = useState([]);
+    var addons = addonsState[0];
+    var setAddons = addonsState[1];
+
+    var addonsLoadingState = useState(false);
+    var addonsLoading = addonsLoadingState[0];
+    var setAddonsLoading = addonsLoadingState[1];
+
+    var addonsErrState = useState(null);
+    var addonsErr = addonsErrState[0];
+    var setAddonsErr = addonsErrState[1];
+
+    // In-flight addon id (disables that row's controls while toggling).
+    var busyAddonState = useState(null);
+    var busyAddon = busyAddonState[0];
+    var setBusyAddon = busyAddonState[1];
+
+    // Addon toggle error banner node (incompatibility / conflict / generic).
+    var addonToggleErrState = useState(null);
+    var addonToggleErr = addonToggleErrState[0];
+    var setAddonToggleErr = addonToggleErrState[1];
 
     var fetchStatus = useCallback(function (name) {
       return apiGet("/profiles/" + encodeURIComponent(name) + "/status")
@@ -944,6 +1585,30 @@
         });
     }, []);
 
+    var loadAddons = useCallback(function (profileName) {
+      if (!profileName) {
+        setAddons([]);
+        return Promise.resolve();
+      }
+      setAddonsLoading(true);
+      setAddonsErr(null);
+      var q =
+        "/addons?target=" +
+        encodeURIComponent(profileName) +
+        "&profile=" +
+        encodeURIComponent(profileName);
+      return apiGet(q)
+        .then(function (data) {
+          setAddons((data && data.addons) || []);
+          setAddonsLoading(false);
+        })
+        .catch(function (err) {
+          setAddonsLoading(false);
+          setAddons([]);
+          setAddonsErr(err);
+        });
+    }, []);
+
     useEffect(
       function () {
         loadProfiles();
@@ -952,19 +1617,91 @@
       [loadProfiles, loadPresets]
     );
 
+    // (Re)load the addon list whenever the selected profile changes.
+    useEffect(
+      function () {
+        if (selected) loadAddons(selected);
+      },
+      [selected, loadAddons]
+    );
+
     var onApplied = useCallback(
       function () {
-        // Refresh the selected profile's status and show the soft toast (§7.2).
-        if (selected) fetchStatus(selected);
+        // Refresh the selected profile's status + addon list and show the soft
+        // toast (§7.2). Applying a preset can change addon compatibility.
+        if (selected) {
+          fetchStatus(selected);
+          loadAddons(selected);
+        }
         setToast(true);
         setTimeout(function () {
           setToast(false);
         }, 7000);
       },
-      [selected, fetchStatus]
+      [selected, fetchStatus, loadAddons]
+    );
+
+    // §5 addon enable handler. `modeId` is passed for modal addons (e.g. YAGNI).
+    var onEnableAddon = useCallback(
+      function (addon, modeId) {
+        if (!selected) return;
+        setBusyAddon(addon.id);
+        setAddonToggleErr(null);
+        var payload = { profile: selected, addon: addon.id, target: selected };
+        if (modeId) payload.mode = modeId;
+        apiPost("/addons/enable", payload)
+          .then(function () {
+            setBusyAddon(null);
+            // Refresh from the source of truth after the toggle (§5 AC).
+            fetchStatus(selected);
+            loadAddons(selected);
+            setToast(true);
+            setTimeout(function () {
+              setToast(false);
+            }, 7000);
+          })
+          .catch(function (err) {
+            setBusyAddon(null);
+            setAddonToggleErr(addonToggleErrorNode(err, addon, selected));
+          });
+      },
+      [selected, fetchStatus, loadAddons]
+    );
+
+    // §5 addon disable handler.
+    var onDisableAddon = useCallback(
+      function (addon) {
+        if (!selected) return;
+        setBusyAddon(addon.id);
+        setAddonToggleErr(null);
+        apiPost("/addons/disable", { profile: selected, addon: addon.id })
+          .then(function () {
+            setBusyAddon(null);
+            fetchStatus(selected);
+            loadAddons(selected);
+            setToast(true);
+            setTimeout(function () {
+              setToast(false);
+            }, 7000);
+          })
+          .catch(function (err) {
+            setBusyAddon(null);
+            setAddonToggleErr(addonToggleErrorNode(err, addon, selected));
+          });
+      },
+      [selected, fetchStatus, loadAddons]
     );
 
     var selectedStatus = selected ? statuses[selected] : null;
+
+    // Map active addon -> its current mode (from live status) so the segmented
+    // control reflects reality after a refresh.
+    var activeModes = {};
+    if (selectedStatus && selectedStatus.addons) {
+      selectedStatus.addons.forEach(function (a) {
+        if (a && a.addon_id) activeModes[a.addon_id] = a.mode;
+      });
+    }
 
     return h(
       "div",
@@ -1082,7 +1819,22 @@
                   onApplied: onApplied,
                   onRetryPresets: loadPresets,
                 }),
-                h(StatusSummary, { profile: selected, status: selectedStatus })
+                h(AddonSection, {
+                  profile: selected,
+                  target: selected,
+                  addons: addons,
+                  loading: addonsLoading,
+                  error: addonsErr,
+                  errorNode: addonToggleErr,
+                  busyAddonId: busyAddon,
+                  activeModes: activeModes,
+                  onEnable: onEnableAddon,
+                  onDisable: onDisableAddon,
+                  onRetry: function () {
+                    if (selected) loadAddons(selected);
+                  },
+                }),
+                h(StatusView, { profile: selected, status: selectedStatus })
               )
             : h(
                 "div",
