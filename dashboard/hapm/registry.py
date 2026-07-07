@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +69,11 @@ class Addon:
         name / description / version: manifest metadata.
         soul_block / skills: addon-level maximum contribution surface.
         compatible: whitelist of profile names / preset slugs (or ``["*"]``).
+        conflicts_with: addon ids (FR-7 v1.1) that must be *inactive* before
+            this addon may be enabled — declarative addon↔addon
+            incompatibility. Distinct from ``compatible`` (which is the FR-5
+            addon↔profile/preset whitelist). Empty for addons with no
+            addon-level conflicts.
         modes: mutually-exclusive modes, or empty for single-behaviour addons.
         directory: absolute path to ``addons/<id>/``.
     """
@@ -82,6 +87,7 @@ class Addon:
     compatible: list[str]
     modes: list[AddonMode]
     directory: Path
+    conflicts_with: list[str] = field(default_factory=list)
 
     # -- compatibility (FR-5 whitelist) --------------------------------
 
@@ -94,6 +100,23 @@ class Addon:
         if COMPAT_ANY in self.compatible:
             return True
         return target in self.compatible
+
+    # -- addon↔addon conflicts (FR-7 v1.1) -----------------------------
+
+    def conflicting_active(self, active_ids: "set[str] | list[str]") -> list[str]:
+        """Return this addon's ``conflicts_with`` ids that are currently active.
+
+        ``active_ids`` is the set of addon ids already enabled on the target
+        profile. The result is the (stable-ordered) subset of
+        ``conflicts_with`` that collides — an empty list means no conflict.
+        Self-references are ignored defensively.
+        """
+        active = set(active_ids)
+        return [
+            cid
+            for cid in self.conflicts_with
+            if cid != self.id and cid in active
+        ]
 
     # -- mode resolution -----------------------------------------------
 
@@ -233,6 +256,29 @@ def load_addon(addon_dir: str | Path) -> Addon:
             f"addon {addon_id!r} has more than one default mode"
         )
 
+    # conflicts_with (FR-7 v1.1): optional list of addon ids that must be
+    # inactive before this addon may be enabled. Declarative addon↔addon
+    # incompatibility, distinct from the FR-5 profile/preset whitelist.
+    raw_conflicts = data.get("conflicts_with", [])
+    if not isinstance(raw_conflicts, list):
+        raise RegistryError(
+            f"addon {addon_id!r} field 'conflicts_with' must be a list of "
+            f"addon ids"
+        )
+    conflicts_with: list[str] = []
+    for c in raw_conflicts:
+        if not isinstance(c, str):
+            raise RegistryError(
+                f"addon {addon_id!r} 'conflicts_with' entries must be strings"
+            )
+        _validate_slug(c)
+        if c == addon_id:
+            raise RegistryError(
+                f"addon {addon_id!r} may not list itself in 'conflicts_with'"
+            )
+        if c not in conflicts_with:
+            conflicts_with.append(c)
+
     return Addon(
         id=addon_id,
         name=name,
@@ -243,6 +289,7 @@ def load_addon(addon_dir: str | Path) -> Addon:
         compatible=[str(c) for c in compatible],
         modes=modes,
         directory=directory,
+        conflicts_with=conflicts_with,
     )
 
 
