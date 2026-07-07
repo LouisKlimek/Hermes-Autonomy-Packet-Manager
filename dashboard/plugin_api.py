@@ -10,6 +10,10 @@ Routes:
   - GET  /api/plugins/hapm/ping     trivial ping
   - GET  /api/plugins/hapm/profiles list locally available Hermes profiles
                                     under ``$HERMES_HOME/profiles/`` (FR-2)
+  - GET  /api/plugins/hapm/profiles/{profile}/status
+                                    per-profile active preset + active addons
+                                    (with mode), read live from that profile's
+                                    ``hapm.lock`` (FR-9)
   - GET  /api/plugins/hapm/addons   list addons compatible with a given
                                     profile/preset target (FR-6a)
   - POST /api/plugins/hapm/addons/enable   enable an addon on a profile (FR-6b)
@@ -23,6 +27,7 @@ rescan alone will NOT mount them.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -52,6 +57,13 @@ from hapm import (  # noqa: E402
 
 # The dashboard mounts this router at /api/plugins/hapm/ at process start.
 router = APIRouter()
+
+# Filename of the per-profile HAPM state/lock record (single source of truth
+# for what HAPM currently manages on a profile). Kept in sync with the state
+# engine (``dashboard/hapm/state.py``: ``HAPM_LOCK_FILENAME``). This endpoint
+# reads it live on every request — no caching — so status never drifts from
+# what a preset-apply (FR-4) or addon-toggle (FR-6) just wrote.
+HAPM_LOCK_FILENAME = "hapm.lock"
 
 
 def _hermes_home() -> Path:
@@ -366,4 +378,141 @@ def disable_addon_route(payload: dict = Body(...)):
         "addon": result.addon_id,
         "enabled": result.enabled,
         "lock_path": result.lock_path,
+    }
+
+
+# ---------------------------------------------------------------------------
+# FR-9: per-profile status endpoint
+# ---------------------------------------------------------------------------
+
+
+def _empty_status(profile: str, profile_dir: Path) -> dict:
+    """Well-defined empty state for a profile HAPM has never touched.
+
+    Returned (with HTTP 200) when the profile exists but has no ``hapm.lock``:
+    no preset applied and no addons active. This is a valid, expected state —
+    not an error — so the UI can render "nothing applied" cleanly.
+    """
+    return {
+        "profile": profile,
+        "profile_dir": str(profile_dir),
+        "lock_present": False,
+        "active_preset": None,
+        "addons": [],
+    }
+
+
+@router.get("/profiles/{profile}/status")
+def profile_status(profile: str):
+    """Per-profile HAPM status (FR-9).
+
+    Reachable at ``GET /api/plugins/hapm/profiles/{profile}/status``. Reads the
+    profile's ``hapm.lock`` **live on every call** (single source of truth — no
+    caching that could drift) and returns:
+
+      - ``active_preset``: the applied preset name, or ``None`` if none.
+      - ``addons``: list of currently active addons, each ``{addon_id, mode}``,
+        so the UI can show every addon with its current mode (FR-9).
+
+    Because the lock is re-read on each request, status reflects reality
+    immediately after any FR-4 preset-apply or FR-6 addon-toggle — there are no
+    stale reads.
+
+    Empty / error semantics (structured JSON bodies, never a 500 stack trace):
+      - profile has **no** ``hapm.lock`` (never touched by HAPM) -> 200 with a
+        well-defined empty state (``lock_present: false``, ``active_preset:
+        null``, ``addons: []``) rather than an error.
+      - ``invalid_profile_name`` (400) when the name is empty or contains path
+        separators / traversal (``/``, ``\\``, ``..``) — the name must be a
+        single profile directory, never a path.
+      - ``profile_not_found`` (404) when ``$HERMES_HOME/profiles/{profile}`` is
+        not an existing directory.
+      - ``corrupt_hapm_lock`` (500) when the lock file exists but is not valid
+        JSON / not an object.
+    """
+    # Reject anything that is not a bare profile directory name. This prevents
+    # path traversal (``../../etc``) and absolute paths from escaping the
+    # profiles root.
+    if (
+        not profile
+        or "/" in profile
+        or "\\" in profile
+        or profile in (".", "..")
+        or os.sep in profile
+        or (os.altsep and os.altsep in profile)
+    ):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "invalid_profile_name",
+                "message": (
+                    "Profile must be a single directory name without path "
+                    f"separators: {profile!r}"
+                ),
+                "profile": profile,
+            },
+        )
+
+    profile_dir = _hermes_home() / "profiles" / profile
+    if not profile_dir.is_dir():
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "profile_not_found",
+                "message": f"No such profile directory: {profile_dir}",
+                "profile": profile,
+                "profile_dir": str(profile_dir),
+            },
+        )
+
+    lock_file = profile_dir / HAPM_LOCK_FILENAME
+    if not lock_file.exists():
+        # Never touched by HAPM -> well-defined empty state, not an error.
+        return _empty_status(profile, profile_dir)
+
+    try:
+        data = json.loads(lock_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "corrupt_hapm_lock",
+                "message": f"Could not read/parse hapm.lock: {exc}",
+                "profile": profile,
+                "lock_path": str(lock_file),
+            },
+        )
+
+    if not isinstance(data, dict):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "corrupt_hapm_lock",
+                "message": "hapm.lock did not contain a JSON object.",
+                "profile": profile,
+                "lock_path": str(lock_file),
+            },
+        )
+
+    # Project the lock into the status shape. We surface only what the UI needs
+    # to render the status view (active preset + each active addon with its
+    # mode); backup ids and internal bookkeeping stay in the lock.
+    active_preset = data.get("active_preset")
+    addons = []
+    for entry in data.get("addons") or []:
+        if not isinstance(entry, dict):
+            continue
+        addons.append(
+            {
+                "addon_id": entry.get("addon_id"),
+                "mode": entry.get("mode"),
+            }
+        )
+
+    return {
+        "profile": profile,
+        "profile_dir": str(profile_dir),
+        "lock_present": True,
+        "active_preset": active_preset,
+        "addons": addons,
     }
