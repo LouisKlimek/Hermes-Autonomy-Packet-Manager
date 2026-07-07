@@ -76,99 +76,99 @@
   var COPY = {
     tabTitle: "Autonomy Packet Manager",
     tabIntro:
-      "Basis-Preset auf ein Hermes-Profil anwenden und den aktuellen Zustand verwalten.",
-    profilesHeader: "Profilauswahl",
-    noPresetBadge: "Kein Preset",
-    profilesLoadError: "Profile konnten nicht geladen werden.",
+      "Apply a base preset to a Hermes profile and manage the current state.",
+    profilesHeader: "Profile selection",
+    noPresetBadge: "No Preset",
+    profilesLoadError: "Profiles could not be loaded.",
     profilesLoadErrorSub:
-      "Bitte Seite neu laden. Falls der Fehler bestehen bleibt, prüfe die Berechtigungen von `$HERMES_HOME/profiles/`.",
-    profilesEmpty: "Keine Profile gefunden.",
+      "Please reload the page. If the error persists, check the permissions on `$HERMES_HOME/profiles/`.",
+    profilesEmpty: "No profiles found.",
     profilesEmptySub:
-      "Es wurden keine Profile unter `$HERMES_HOME/profiles/` gefunden. Prüfe die Hermes-Installation.",
-    chooseProfile: "Wähle links ein Profil.",
-    retry: "Erneut versuchen",
-    presetHeader: "Aktives Preset",
-    presetEmpty: "Kein Preset angewendet — wähle ein Template",
+      "No profiles were found under `$HERMES_HOME/profiles/`. Check the Hermes installation.",
+    chooseProfile: "Select a profile on the left.",
+    retry: "Retry",
+    presetHeader: "Active Preset",
+    presetEmpty: "No preset applied — choose a template",
     presetEmptySub:
-      "Wähle unten ein Preset aus der Liste, um SOUL.md, Skills und Konfiguration dieses Profils zu setzen.",
+      "Choose a preset from the list below to set this profile's SOUL.md, skills, and configuration.",
     presetPickerLabel: "Preset",
-    applyButton: "Preset anwenden",
-    applying: "Wird angewendet …",
-    cancel: "Abbrechen",
-    dismiss: "Schließen",
-    dialogTitle: "Preset anwenden?",
+    applyButton: "Apply Preset",
+    applying: "Applying …",
+    cancel: "Cancel",
+    dismiss: "Close",
+    dialogTitle: "Apply preset?",
     statusHeaderPrefix: "Status: ",
-    activePresetLabel: "Aktives Preset: ",
-    noPresetApplied: "— (kein Preset angewendet)",
-    presetsLoadError: "Presets konnten nicht geladen werden",
-    presetsLoadErrorSub: "Bitte erneut versuchen.",
-    applyFailedTitle: "Preset konnte nicht angewendet werden",
-    applyUnknownError: "Unbekannter Fehler beim Anwenden des Presets.",
+    activePresetLabel: "Active preset: ",
+    noPresetApplied: "— (no preset applied)",
+    presetsLoadError: "Presets could not be loaded",
+    presetsLoadErrorSub: "Please try again.",
+    applyFailedTitle: "Preset could not be applied",
+    applyUnknownError: "Unknown error while applying the preset.",
     // Restart notice §7.1 (post-install, routes not mounted)
-    restartHardTitle: "Neustart erforderlich",
+    restartHardTitle: "Restart required",
     restartHardBody:
-      "Der Autonomy Packet Manager wurde installiert oder aktualisiert. Backend-Routen werden nur beim Start von `hermes dashboard` geladen — starte das Dashboard neu, damit alle Funktionen verfügbar sind.",
+      "The Autonomy Packet Manager was installed or updated. Backend routes are only loaded when `hermes dashboard` starts — restart the dashboard so all functionality becomes available.",
     // Restart notice §7.2 (post-action soft toast)
     restartSoftBody:
-      "Änderung gespeichert. Wirkt gemäß normaler Hermes-Profil-Reload-Semantik; falls das Verhalten nicht wie erwartet greift, starte die betroffene Agenten-Session neu.",
+      "Change saved. Takes effect per normal Hermes profile-reload semantics; if the behavior doesn't take effect as expected, restart the affected agent session.",
     // Error §6.1 repo unreachable
-    repoUnreachableTitle: "Repository nicht erreichbar",
+    repoUnreachableTitle: "Repository unreachable",
     repoUnreachableBody:
-      "Presets und Addons konnten nicht geladen werden, da das Repository `LouisKlimek/Hermes-Autonomy-Packet-Manager` gerade nicht erreichbar ist. Prüfe deine Internetverbindung oder GitHub-Zugangsdaten.",
+      "Presets and addons could not be loaded because the repository `LouisKlimek/Hermes-Autonomy-Packet-Manager` is currently unreachable. Check your internet connection or GitHub credentials.",
     // Error §6.2 profile not writable
-    notWritableTitle: "Profil nicht beschreibbar",
+    notWritableTitle: "Profile not writable",
 
     // --- §5 Addon section ------------------------------------------------
     addonsHeader: "Addons",
     addonsIntro:
-      "Umkehrbare Verhaltens-Addons für dieses Profil. Es werden nur Addons angezeigt, die mit dem aktiven Preset bzw. Profil kompatibel sind.",
-    addonsLoading: "Addons werden geladen …",
-    addonsEmpty: "Keine kompatiblen Addons für dieses Profil.",
+      "Reversible behavior addons for this profile. Only addons compatible with the active preset or profile are shown.",
+    addonsLoading: "Loading addons …",
+    addonsEmpty: "No compatible addons for this profile.",
     addonsEmptySub:
-      "Für das aktive Preset dieses Profils sind derzeit keine kompatiblen Addons verfügbar.",
-    addonsLoadError: "Addons konnten nicht geladen werden",
-    addonsLoadErrorSub: "Bitte erneut versuchen.",
-    addonOn: "An",
-    addonOff: "Aus",
-    addonModeLabel: "Modus",
+      "No compatible addons are currently available for this profile's active preset.",
+    addonsLoadError: "Addons could not be loaded",
+    addonsLoadErrorSub: "Please try again.",
+    addonOn: "On",
+    addonOff: "Off",
+    addonModeLabel: "Mode",
     // Error: addon incompatible (backend `not_compatible`, 409) §6.3
-    addonIncompatibleTitle: "Addon nicht kompatibel",
+    addonIncompatibleTitle: "Addon not compatible",
     // Error: addon conflict (backend `conflict`, 409) §6.4
-    addonConflictTitle: "Addon-Konflikt",
+    addonConflictTitle: "Addon conflict",
     addonToggleUnknownError:
-      "Das Addon konnte nicht umgeschaltet werden (unbekannter Fehler).",
+      "The addon could not be toggled (unknown error).",
     // YAGNI Modus A placeholder — Human Gate (t_f321af09): shown, disabled,
     // never wired to a backend call.
     ponytailLabel: "Ponytail",
     ponytailDisabledHint:
-      "„Ponytail“ (Modus A) ist noch nicht verfügbar und für dieses Release deaktiviert.",
+      "Coming soon — pending approval from Louis.",
 
     // --- §8 Status view --------------------------------------------------
-    statusViewHeader: "Aktueller Zustand",
-    statusActivePresetLabel: "Aktives Preset",
-    statusNoPreset: "Kein Preset angewendet",
-    statusActiveAddonsLabel: "Aktive Addons",
-    statusNoAddons: "Keine aktiven Addons",
-    statusModePrefix: "Modus: ",
+    statusViewHeader: "Current state",
+    statusActivePresetLabel: "Active Preset",
+    statusNoPreset: "No preset applied",
+    statusActiveAddonsLabel: "Active Addons",
+    statusNoAddons: "No active addons",
+    statusModePrefix: "Mode: ",
   };
 
   function addonIncompatibleBody(addonName, target) {
     return (
-      "Das Addon „" +
+      "The addon \"" +
       addonName +
-      "\" ist nicht mit „" +
+      "\" is not compatible with \"" +
       target +
-      "\" kompatibel und kann für dieses Profil nicht aktiviert werden. " +
-      "Kompatible Addons richten sich nach der Whitelist des jeweiligen Addons."
+      "\" and cannot be activated for this profile. " +
+      "Compatible addons are determined by each addon's whitelist."
     );
   }
 
   function addonConflictBody(addonName) {
     return (
-      "Das Addon „" +
+      "The addon \"" +
       addonName +
-      "\" steht im Konflikt mit einem bereits aktiven Addon oder einem vorhandenen SOUL-Block und wurde nicht aktiviert. " +
-      "Deaktiviere das kollidierende Addon und versuche es erneut."
+      "\" conflicts with an already-active addon or an existing SOUL block and was not activated. " +
+      "Disable the conflicting addon and try again."
     );
   }
 
@@ -211,9 +211,9 @@
 
   function presetNotWritableBody(profile) {
     return (
-      "Das Profil „" +
+      "Profile \"" +
       profile +
-      "\" konnte nicht geändert werden — die Dateien sind nicht beschreibbar. Prüfe die Dateiberechtigungen unter `$HERMES_HOME/profiles/" +
+      "\" could not be modified — the files are not writable. Check the file permissions under `$HERMES_HOME/profiles/" +
       profile +
       "/`."
     );
@@ -221,12 +221,12 @@
 
   function dialogBody(presetName, profileName) {
     return [
-      "Das Anwenden von „" +
+      "Applying \"" +
         presetName +
-        "\" überschreibt SOUL.md, Skills und die zulässigen Konfigurationsfelder des Profils „" +
+        "\" will overwrite SOUL.md, skills, and the allowed configuration fields of profile \"" +
         profileName +
-        "\". Der aktuelle Zustand wird vorher automatisch gesichert und kann jederzeit wiederhergestellt werden, solange keine weiteren Änderungen vorgenommen wurden.",
-      "Aktive Addons dieses Profils bleiben nach Möglichkeit erhalten, sofern sie mit dem neuen Preset kompatibel sind. Inkompatible Addons werden automatisch deaktiviert.",
+        "\". The current state is automatically backed up beforehand and can be restored at any time, as long as no further changes have been made.",
+      "Active addons on this profile are preserved where possible, provided they are compatible with the new preset. Incompatible addons are automatically disabled.",
     ];
   }
 
