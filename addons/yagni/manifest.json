@@ -2,25 +2,16 @@
   "id": "yagni",
   "name": "YAGNI Principles",
   "description": "Enforces 'You Aren't Gonna Need It' discipline: build the smallest correct change, avoid speculative abstractions and future-proofing.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "contributes": {
     "soul_block": true,
-    "skills": true
+    "skills": false
   },
   "compatible_profiles_or_presets": [
     "fullstack-developer",
     "fullstack-developer-preset"
   ],
   "modes": [
-    {
-      "id": "ponytail",
-      "name": "Ponytail",
-      "description": "Activates YAGNI via the external DietrichGebert/ponytail ruleset/skills (skills-based). Content filled by FR-8.",
-      "contributes": {
-        "soul_block": false,
-        "skills": true
-      }
-    },
     {
       "id": "prompt",
       "name": "Prompt",
@@ -40,5 +31,10 @@
         "skills": false
       }
     }
-  ]
+  ],
+  "_notes": {
+    "excluded_modes": {
+      "ponytail": "Modus A ('Ponytail', external repo coupling to DietrichGebert/ponytail) is intentionally NOT declared here. It is gated behind a separate CEO clarification (kanban task t_f321af09, OQ-1 Human Gate, unresolved) and is out of scope for FR-8's prompt+off delivery. Do not wire or implement it until that gate is resolved."
+    }
+  }
 }
