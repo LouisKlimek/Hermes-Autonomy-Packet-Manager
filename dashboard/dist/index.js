@@ -70,6 +70,29 @@
 
   var API = "/api/plugins/hapm";
 
+  // Inject the plugin's small CSS payload once (spinner keyframes + the
+  // mobile stacking rule for the conflict dialog footer). Done here rather
+  // than inline because @keyframes and media queries can't be expressed via
+  // React inline styles.
+  (function injectStyles() {
+    if (typeof document === "undefined") return;
+    if (document.getElementById("hapm-plugin-styles")) return;
+    var css =
+      "@keyframes hapm-spin{to{transform:rotate(360deg)}}" +
+      "@media (max-width:560px){" +
+      ".hapm-conflict-footer{flex-direction:column-reverse;align-items:stretch}" +
+      ".hapm-conflict-footer>button{width:100%}" +
+      "}";
+    try {
+      var el = document.createElement("style");
+      el.id = "hapm-plugin-styles";
+      el.textContent = css;
+      (document.head || document.documentElement).appendChild(el);
+    } catch (e) {
+      /* non-fatal: spinner still shows, just without rotation */
+    }
+  })();
+
   // ---------------------------------------------------------------------------
   // German UI copy (verbatim from HAPM_UX_SPEC.md — do not paraphrase).
   // ---------------------------------------------------------------------------
@@ -142,6 +165,24 @@
     ponytailLabel: "Ponytail",
     ponytailDisabledHint:
       "Coming soon — pending approval from Louis.",
+
+    // --- v1.1 Addon↔Addon Conflict Resolution Dialog (t_3a0434b2) -------
+    // ENGLISH copy per the UX spec (HAPM_V1_1_CONFLICT_RESOLUTION_POPUP_SPEC.md,
+    // §Copy Strings). This guided dialog is the primary path for
+    // Addon↔Addon `conflicts_with` collisions; the flat v1 error banners
+    // above stay as the fallback for FR-5 incompatibility and for the
+    // "conflict check unavailable" (network) case.
+    conflictDialogTitle: "Addon Conflict",
+    conflictReversibilityNote:
+      "Deactivated addons can be restored exactly as they were — nothing is lost.",
+    conflictReasonFallbackPrefix: "This addon is not compatible with ",
+    conflictButtonPrimary: "Deactivate Conflicting & Activate This One",
+    conflictButtonSecondary: "Cancel — Keep Current Addons",
+    conflictLoading: "Applying changes…",
+    conflictRollbackError:
+      "Couldn't apply the change. Nothing was deactivated or activated — your current setup is unchanged.",
+    conflictCheckUnavailable:
+      "Couldn't check for addon conflicts right now. Try again in a moment.",
 
     // --- §8 Status view --------------------------------------------------
     statusViewHeader: "Current state",
@@ -381,6 +422,7 @@
       "button",
       {
         type: "button",
+        ref: props.buttonRef || undefined,
         disabled: !!props.disabled,
         onClick: props.onClick,
         style: Object.assign(base, props.style || {}),
@@ -479,6 +521,345 @@
             props.busy ? COPY.applying : COPY.applyButton
           )
         )
+      )
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // v1.1 Addon↔Addon Conflict Resolution Dialog (t_3a0434b2).
+  //
+  // Guided, opt-in dialog shown when the user toggles an addon ON and the
+  // backend /addons/enable check returns `addon_conflict` (409) — i.e. the
+  // target's manifest `conflicts_with` overlaps currently-active addons. It
+  // lists the colliding active addons + reasons, and offers exactly two
+  // actions: (a) confirm → POST /addons/resolve (one atomic call), or
+  // (b) cancel → no API call, no state change. See
+  // HAPM_V1_1_CONFLICT_RESOLUTION_POPUP_SPEC.md for the full contract.
+  //
+  // props:
+  //   targetAddonName  string  — display name of the addon being activated
+  //   conflicts        array   — [{ name, reason }] colliding ACTIVE addons
+  //   busy             bool    — true while the resolve call is in flight
+  //   errorNode        node    — inline rollback banner (or null)
+  //   onCancel         fn      — close, no API call, no state change
+  //   onConfirm        fn      — fire the atomic guided-resolution call
+  // ---------------------------------------------------------------------------
+  function ConflictDialog(props) {
+    var conflicts = props.conflicts || [];
+    var titleId = "hapm-conflict-title";
+    var dialogRef = React.useRef(null);
+    var cancelRef = React.useRef(null);
+    var triggerRef = React.useRef(null);
+
+    // Remember what had focus before the dialog opened, and move initial focus
+    // to the Cancel (secondary) button so an accidental Enter does not confirm
+    // a state-changing action. On unmount, restore focus to the trigger.
+    useEffect(function () {
+      triggerRef.current =
+        (typeof document !== "undefined" && document.activeElement) || null;
+      // Focus the Cancel button once rendered.
+      if (cancelRef.current) {
+        try {
+          cancelRef.current.focus();
+        } catch (e) {}
+      }
+      return function () {
+        var t = triggerRef.current;
+        if (t && typeof t.focus === "function") {
+          try {
+            t.focus();
+          } catch (e) {}
+        }
+      };
+    }, []);
+
+    // Keyboard handling: Esc = Cancel (disabled while busy); Tab/Shift+Tab
+    // trap focus within the dialog.
+    function onKeyDown(e) {
+      if (e.key === "Escape" || e.key === "Esc") {
+        if (!props.busy) {
+          e.preventDefault();
+          props.onCancel();
+        }
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var root = dialogRef.current;
+      if (!root) return;
+      var focusable = root.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), ' +
+          '[tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    var introText =
+      "'" +
+      (props.targetAddonName || "") +
+      "' conflicts with " +
+      conflicts.length +
+      " currently active addon(s):";
+
+    return h(
+      "div",
+      {
+        style: {
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: 16,
+        },
+        // Backdrop click does NOT dismiss — this is a decision dialog.
+        onClick: function (e) {
+          if (e.target === e.currentTarget) {
+            /* intentionally no-op */
+          }
+        },
+        onKeyDown: onKeyDown,
+      },
+      h(
+        "div",
+        {
+          ref: dialogRef,
+          role: "dialog",
+          "aria-modal": "true",
+          "aria-labelledby": titleId,
+          style: {
+            background: C.panel,
+            color: C.text,
+            border: "1px solid " + C.border,
+            borderRadius: 12,
+            maxWidth: 520,
+            width: "100%",
+            maxHeight: "85vh",
+            display: "flex",
+            flexDirection: "column",
+            padding: "20px 22px",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+          },
+        },
+        // Header: title + close ("x") icon (equivalent to Cancel).
+        h(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 12,
+            },
+          },
+          h(
+            "h2",
+            {
+              id: titleId,
+              style: { fontSize: 17, fontWeight: 700, margin: 0 },
+            },
+            COPY.conflictDialogTitle
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              "aria-label": COPY.conflictButtonSecondary,
+              disabled: !!props.busy,
+              onClick: function () {
+                if (!props.busy) props.onCancel();
+              },
+              style: {
+                background: "transparent",
+                border: "none",
+                color: C.text,
+                fontSize: 20,
+                lineHeight: 1,
+                cursor: props.busy ? "not-allowed" : "pointer",
+                opacity: props.busy ? 0.4 : 0.7,
+                padding: "0 4px",
+                fontFamily: "inherit",
+              },
+            },
+            "\u00d7"
+          )
+        ),
+        // Body region 1: framing sentence.
+        h(
+          "p",
+          {
+            style: {
+              fontSize: 13.5,
+              lineHeight: 1.55,
+              margin: "0 0 12px",
+              opacity: 0.92,
+            },
+          },
+          introText
+        ),
+        // Body region 2: scrollable conflict list (each row: name + reason).
+        h(
+          "div",
+          {
+            style: {
+              overflowY: "auto",
+              margin: "0 0 14px",
+              // keep long lists from growing the modal past a sane fraction
+              maxHeight: "38vh",
+            },
+          },
+          conflicts.map(function (c, i) {
+            var reasonId = "hapm-conflict-reason-" + i;
+            return h(
+              "div",
+              {
+                key: i,
+                style: {
+                  padding: "10px 12px",
+                  border: "1px solid " + C.border,
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.02)",
+                  marginBottom: 8,
+                },
+              },
+              h(
+                "div",
+                {
+                  style: { fontSize: 13.5, fontWeight: 700 },
+                  "aria-describedby": reasonId,
+                },
+                c.name
+              ),
+              h(
+                "div",
+                {
+                  id: reasonId,
+                  style: {
+                    fontSize: 12.5,
+                    opacity: 0.8,
+                    marginTop: 3,
+                    lineHeight: 1.5,
+                    // Safety-relevant: wrap, never truncate.
+                    whiteSpace: "normal",
+                    wordBreak: "break-word",
+                  },
+                },
+                c.reason
+              )
+            );
+          })
+        ),
+        // Body region 3: reversibility note (icon + text, not color-only),
+        // always present, not dismissible.
+        h(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: C.okBg,
+              border: "1px solid " + C.okBorder,
+              margin: "0 0 4px",
+            },
+          },
+          h(
+            "span",
+            { "aria-hidden": "true", style: { fontSize: 14, lineHeight: 1.5 } },
+            "\u21ba"
+          ),
+          h(
+            "span",
+            { style: { fontSize: 12.5, lineHeight: 1.5, opacity: 0.95 } },
+            COPY.conflictReversibilityNote
+          )
+        ),
+        // Inline rollback / failure banner (appears above footer on error).
+        props.errorNode
+          ? h("div", { style: { marginTop: 12 } }, props.errorNode)
+          : null,
+        // Footer: either the two actions, or the loading indicator.
+        props.busy
+          ? h(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  marginTop: 16,
+                },
+              },
+              h("span", {
+                "aria-hidden": "true",
+                style: {
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  border: "2px solid " + C.border,
+                  borderTopColor: C.accent,
+                  display: "inline-block",
+                  animation: "hapm-spin 0.8s linear infinite",
+                },
+              }),
+              h(
+                "span",
+                {
+                  role: "status",
+                  style: { fontSize: 13, opacity: 0.85 },
+                },
+                COPY.conflictLoading
+              )
+            )
+          : h(
+              "div",
+              {
+                className: "hapm-conflict-footer",
+                style: {
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  marginTop: 16,
+                  flexWrap: "wrap",
+                },
+              },
+              h(
+                Button,
+                {
+                  kind: "secondary",
+                  buttonRef: cancelRef,
+                  onClick: props.onCancel,
+                },
+                COPY.conflictButtonSecondary
+              ),
+              h(
+                Button,
+                {
+                  kind: "primary",
+                  onClick: props.onConfirm,
+                },
+                COPY.conflictButtonPrimary
+              )
+            )
       )
     );
   }
@@ -1527,6 +1908,26 @@
     var addonToggleErr = addonToggleErrState[0];
     var setAddonToggleErr = addonToggleErrState[1];
 
+    // v1.1 Addon↔Addon conflict-resolution dialog state (t_3a0434b2).
+    // `conflictDialog` is null when closed, else:
+    //   { addon, target, mode, conflicts:[{name,reason}] }
+    var conflictDialogState = useState(null);
+    var conflictDialog = conflictDialogState[0];
+    var setConflictDialog = conflictDialogState[1];
+    // Whether the guided /addons/resolve call is currently in flight.
+    var conflictBusyState = useState(false);
+    var conflictBusy = conflictBusyState[0];
+    var setConflictBusy = conflictBusyState[1];
+    // Inline rollback/error banner node shown *inside* the dialog (or null).
+    var conflictErrState = useState(null);
+    var conflictErr = conflictErrState[0];
+    var setConflictErr = conflictErrState[1];
+    // Success snackbar after a resolved conflict: null, or
+    //   { target:<name>, deactivated:[<name>,...] }.
+    var conflictToastState = useState(null);
+    var conflictToast = conflictToastState[0];
+    var setConflictToast = conflictToastState[1];
+
     var fetchStatus = useCallback(function (name) {
       return apiGet("/profiles/" + encodeURIComponent(name) + "/status")
         .then(function (st) {
@@ -1641,6 +2042,24 @@
       [selected, fetchStatus, loadAddons]
     );
 
+    // Map an addon id to its human-readable display name using the loaded
+    // addon list; falls back to the id itself if it isn't in the list (e.g. a
+    // colliding addon that isn't shown as a compatible row). Used to render
+    // conflicting-addon names + the success toast (the backend conflict object
+    // carries ids, not display names).
+    var addonDisplayName = useCallback(
+      function (addonId) {
+        if (!addonId) return "";
+        for (var i = 0; i < addons.length; i++) {
+          if (addons[i] && addons[i].id === addonId) {
+            return addons[i].name || addonId;
+          }
+        }
+        return addonId;
+      },
+      [addons]
+    );
+
     // §5 addon enable handler. `modeId` is passed for modal addons (e.g. YAGNI).
     var onEnableAddon = useCallback(
       function (addon, modeId) {
@@ -1662,11 +2081,103 @@
           })
           .catch(function (err) {
             setBusyAddon(null);
+            // v1.1: Addon↔Addon `conflicts_with` collision → open the guided
+            // resolution dialog instead of the flat error banner. Every other
+            // error (not_compatible, SOUL `conflict`, network "check
+            // unavailable", generic) keeps its existing v1 flat-error path.
+            var code = err && err.body && err.body.error;
+            var conflictObj = err && err.body && err.body.conflict;
+            if (code === "addon_conflict" && conflictObj) {
+              var rows = (conflictObj.conflicts || []).map(function (c) {
+                return {
+                  name: addonDisplayName(c.addon_id),
+                  reason:
+                    (c.reason && String(c.reason)) ||
+                    COPY.conflictReasonFallbackPrefix +
+                      "'" +
+                      (addon.name || addon.id) +
+                      "'.",
+                };
+              });
+              setConflictErr(null);
+              setConflictBusy(false);
+              setConflictDialog({
+                addon: addon,
+                target: selected,
+                mode: modeId || null,
+                conflicts: rows,
+              });
+              return;
+            }
             setAddonToggleErr(addonToggleErrorNode(err, addon, selected));
           });
       },
-      [selected, fetchStatus, loadAddons]
+      [selected, fetchStatus, loadAddons, addonDisplayName]
     );
+
+    // v1.1: confirmed guided resolution. Fires exactly ONE atomic call to
+    // /addons/resolve (deactivate colliding addons + activate target). On
+    // success the dialog auto-closes and a success toast is shown; on
+    // failure/rollback the dialog stays open with the inline rollback banner
+    // and the two buttons are restored for retry.
+    var onConfirmConflict = useCallback(
+      function () {
+        if (!conflictDialog || !selected) return;
+        var addon = conflictDialog.addon;
+        setConflictBusy(true);
+        setConflictErr(null);
+        var payload = {
+          profile: selected,
+          addon: addon.id,
+          target: conflictDialog.target || selected,
+        };
+        if (conflictDialog.mode) payload.mode = conflictDialog.mode;
+        apiPost("/addons/resolve", payload)
+          .then(function (res) {
+            setConflictBusy(false);
+            setConflictDialog(null);
+            // Success toast (§Copy Strings toast.success).
+            var deactivated =
+              (res && res.disabled && res.disabled.length
+                ? res.disabled
+                : conflictDialog.conflicts.map(function (c) {
+                    return c.name;
+                  })
+              ).map(function (d) {
+                return addonDisplayName(d);
+              });
+            setConflictToast({
+              target: addon.name || addon.id,
+              deactivated: deactivated,
+            });
+            setTimeout(function () {
+              setConflictToast(null);
+            }, 5000);
+            // Re-render addon list + status from the source of truth.
+            fetchStatus(selected);
+            loadAddons(selected);
+          })
+          .catch(function () {
+            // Atomic backend guarantees nothing was applied on failure.
+            setConflictBusy(false);
+            setConflictErr(
+              h(
+                Banner,
+                { variant: "danger" },
+                COPY.conflictRollbackError
+              )
+            );
+          });
+      },
+      [conflictDialog, selected, fetchStatus, loadAddons, addonDisplayName]
+    );
+
+    // v1.1: cancel — close the dialog, no API call, no state change.
+    var onCancelConflict = useCallback(function () {
+      setConflictDialog(null);
+      setConflictErr(null);
+      setConflictBusy(false);
+    }, []);
 
     // §5 addon disable handler.
     var onDisableAddon = useCallback(
@@ -1743,6 +2254,19 @@
 
       // §7.2 soft success toast.
       toast ? h(Banner, { variant: "info" }, COPY.restartSoftBody) : null,
+
+      // v1.1 conflict-resolution success snackbar (§Copy Strings toast.success).
+      conflictToast
+        ? h(
+            Banner,
+            { variant: "info" },
+            "'" +
+              conflictToast.target +
+              "' is now active. Deactivated: " +
+              (conflictToast.deactivated || []).join(", ") +
+              "."
+          )
+        : null,
 
       // Two-column layout (§2). flex-wrap gives the responsive collapse.
       h(
@@ -1842,7 +2366,23 @@
                 restartHard ? COPY.restartHardBody : COPY.chooseProfile
               )
         )
-      )
+      ),
+
+      // v1.1 Addon↔Addon conflict-resolution dialog (t_3a0434b2). Rendered
+      // last so it overlays the whole tab; null when there's no active conflict.
+      conflictDialog
+        ? h(ConflictDialog, {
+            targetAddonName:
+              (conflictDialog.addon &&
+                (conflictDialog.addon.name || conflictDialog.addon.id)) ||
+              "",
+            conflicts: conflictDialog.conflicts,
+            busy: conflictBusy,
+            errorNode: conflictErr,
+            onCancel: onCancelConflict,
+            onConfirm: onConfirmConflict,
+          })
+        : null
     );
   }
 
