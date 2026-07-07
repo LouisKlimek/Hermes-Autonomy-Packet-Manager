@@ -63,6 +63,12 @@ from hapm import (  # noqa: E402
 )
 from hapm import apply as hapm_apply  # noqa: E402
 from hapm.apply import ApplyError, WhitelistError  # noqa: E402
+from hapm.builder_drafts import DraftError, DraftStore, drafts_root  # noqa: E402
+from hapm.builder_pr import BuilderPRError, open_addon_pr  # noqa: E402
+from hapm.builder_sanitize import (  # noqa: E402
+    SanitizeError,
+    check_addon,
+)
 
 # The dashboard mounts this router at /api/plugins/hapm/ at process start.
 router = APIRouter()
@@ -681,4 +687,177 @@ def revert_preset(payload: dict = Body(...)):
         )
 
     return {"status": "reverted", **result}
+
+
+# ---------------------------------------------------------------------------
+# v1.2 In-UI Addon Builder (spec Req 1 §4, Req 2 §5, FR-7 §6)
+#
+# Two-stage flow, server-side enforced end to end:
+#   1. POST /builder/check         live sanitizing (client convenience mirror)
+#   2. POST /builder/drafts        save a Local Draft (zero effect on any
+#                                  profile until a PR is merged)
+#   3. GET  /builder/drafts        list drafts
+#   4. GET  /builder/drafts/{id}   fetch one draft
+#   5. POST /builder/submit        final non-overridable sanitize + open PR
+#                                  (branch + PR only; never push to main,
+#                                   never auto-merge)
+#
+# The sanitizing gate (``check_addon``) is applied on BOTH the draft-save and
+# the submit path, so a direct API call that bypasses the client cannot persist
+# or submit content that violates §4 (acceptance criteria #1, #2, #3).
+# ---------------------------------------------------------------------------
+
+
+def _repo_root() -> Path:
+    """Repo working tree used to materialize + open community-addon PRs.
+
+    ``$HAPM_REPO_ROOT`` overrides; otherwise the repo root is the parent of the
+    ``dashboard/`` directory this module lives in.
+    """
+    val = os.environ.get("HAPM_REPO_ROOT", "").strip()
+    if val:
+        return Path(val)
+    return _HERE.parent
+
+
+def _draft_store() -> DraftStore:
+    return DraftStore(hermes_home=_hermes_home())
+
+
+def _builder_inputs(payload: dict) -> dict:
+    """Normalize a builder payload into the ``check_addon`` draft shape."""
+    return {
+        "name": str(payload.get("name", "")).strip(),
+        "description": str(payload.get("description", "")).strip(),
+        "soul": dict(payload.get("soul") or {}),
+        "skill": dict(payload.get("skill") or {}),
+    }
+
+
+@router.post("/builder/check")
+def builder_check(payload: dict = Body(...)):
+    """Server-side sanitizing pass over builder inputs (spec §4.2).
+
+    The client runs a live check for UX, but enforcement is here: this returns
+    the exact same :class:`SanitizeResult` the draft-save / submit paths use, so
+    the client's check can never diverge from (or override) the server's.
+    """
+    result = check_addon(_builder_inputs(payload))
+    return {"ok": result.ok, "violations": [v.to_dict() for v in result.violations]}
+
+
+@router.post("/builder/drafts")
+def builder_save_draft(payload: dict = Body(...)):
+    """Save a Local Draft (spec §5 hybrid — not activatable).
+
+    Runs the non-overridable §4 sanitizing gate first; on any violation nothing
+    is written and a 422 lists the blocking reasons. A saved draft lives in the
+    HAPM draft store (outside every profile and the repo tree) and has zero
+    effect on any real profile until its PR is merged.
+
+    Body: ``{name, description, author, soul:{enabled,body}, skill:{...}}``.
+    """
+    author = str(payload.get("author", "")).strip()
+    inputs = _builder_inputs(payload)
+    if not inputs["name"]:
+        return _err(400, "bad_request", "'name' is required.")
+    if not author:
+        return _err(400, "bad_request", "'author' (git username) is required.")
+
+    gate = check_addon(inputs)
+    if not gate.ok:
+        return _err(
+            422,
+            "sanitizing_failed",
+            "The draft cannot be saved until every flagged item is removed.",
+            violations=[v.to_dict() for v in gate.violations],
+        )
+
+    try:
+        store = _draft_store()
+        draft = store.create(
+            name=inputs["name"],
+            description=inputs["description"],
+            author=author,
+            soul=inputs["soul"],
+            skill=inputs["skill"],
+        )
+    except SanitizeError as exc:
+        return _err(422, "sanitizing_failed", str(exc))
+    except DraftError as exc:
+        return _err(400, "draft_error", str(exc))
+
+    return {"status": "saved", "draft": draft.to_dict()}
+
+
+@router.get("/builder/drafts")
+def builder_list_drafts():
+    """List all saved local drafts (never activatable state)."""
+    store = _draft_store()
+    return {
+        "drafts_root": str(drafts_root(_hermes_home())),
+        "drafts": [d.to_dict() for d in store.list()],
+    }
+
+
+@router.get("/builder/drafts/{addon_id}")
+def builder_get_draft(addon_id: str):
+    """Fetch one saved draft by id."""
+    store = _draft_store()
+    try:
+        draft = store.load(addon_id)
+    except DraftError as exc:
+        return _err(404, "draft_not_found", str(exc), addon_id=addon_id)
+    return {"draft": draft.to_dict()}
+
+
+@router.post("/builder/submit")
+def builder_submit(payload: dict = Body(...)):
+    """Open the community-addon PR for a saved draft (spec §5 activation path).
+
+    Loads the draft, runs the final non-overridable §4 sanitizing gate again,
+    materializes exactly the enumerated files under ``addons/<id>/`` and opens
+    (or updates) the addon's dedicated PR branch. The service account only
+    creates a branch + PR — it never pushes to ``main`` and never auto-merges;
+    the addon is inert until a human / pr-reviewer merges the PR.
+
+    Body: ``{addon_id: str, base?: str}``.
+    """
+    addon_id = str(payload.get("addon_id", "")).strip()
+    if not addon_id:
+        return _err(400, "bad_request", "'addon_id' is required.")
+    base = str(payload.get("base", "main")).strip() or "main"
+
+    store = _draft_store()
+    try:
+        draft = store.load(addon_id)
+    except DraftError as exc:
+        return _err(404, "draft_not_found", str(exc), addon_id=addon_id)
+
+    # Final, non-overridable sanitize gate before any file is written / pushed.
+    gate = check_addon(draft.to_dict())
+    if not gate.ok:
+        return _err(
+            422,
+            "sanitizing_failed",
+            "The draft cannot be submitted until every flagged item is removed.",
+            violations=[v.to_dict() for v in gate.violations],
+        )
+
+    try:
+        result = open_addon_pr(draft, _repo_root(), base=base)
+    except SanitizeError as exc:
+        return _err(422, "sanitizing_failed", str(exc), addon_id=addon_id)
+    except BuilderPRError as exc:
+        return _err(400, "pr_failed", str(exc), addon_id=addon_id)
+
+    return {
+        "status": "pr_opened",
+        "addon_id": addon_id,
+        "branch": result.branch,
+        "pr_url": result.pr_url,
+        "pr_number": result.pr_number,
+        "head_sha": result.head_sha,
+        "files": result.files,
+    }
 

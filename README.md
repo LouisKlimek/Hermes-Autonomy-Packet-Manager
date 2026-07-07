@@ -180,6 +180,48 @@ The key guarantee is proven by
 then fully revert — `SOUL.md` / `config.yaml` / `skills/` return byte-identical
 to the pre-change state.
 
+## In-UI Addon Builder (v1.2)
+
+Lets a user author a **community addon** (a SOUL.md block and/or an inline
+skill) from the dashboard, without touching a profile directly. Backend routes:
+
+```text
+POST /api/plugins/hapm/builder/check          server-side sanitizing pass
+POST /api/plugins/hapm/builder/drafts         save a Local Draft (not activatable)
+GET  /api/plugins/hapm/builder/drafts         list drafts
+GET  /api/plugins/hapm/builder/drafts/{id}    fetch one draft
+POST /api/plugins/hapm/builder/submit         final sanitize + open a PR
+```
+
+Security model (all server-enforced — the client's live check is UX only):
+
+- **Fixed write targets (§4.1).** The builder never accepts a free file path.
+  A draft can only ever produce `addons/<id>/manifest.json`, an optional
+  `soul_block.md`, and an optional `skills/hapm-addon-<id>/SKILL.md` — enforced
+  by `builder_sanitize.assert_target_allowed`, so a direct API call that forces
+  any other path is rejected regardless of the client.
+- **Seven non-overridable deny-pattern rules (§4.2)** (secrets, forbidden
+  config keys, exfiltration/bypass phrasing, path/env refs, executable
+  code/shell, size limit, HTML/script tags) run on **every** draft save **and**
+  again as a final gate before PR creation. No client-side override.
+- **Skills are inline markdown only (§4.3)** — no `scripts/`/`references/`/
+  `assets/` subfolders, no file smuggling; curated selections come from a fixed
+  whitelist.
+- **Local Draft + PR to activate (§5).** A saved draft lives in the HAPM draft
+  store outside every profile and the repo tree, and has **zero effect** on any
+  profile. The only activation path is opening a PR that lands the addon in the
+  shared `addons/` registry; the service account may only create a branch and
+  open a PR — it never pushes to `main` and never auto-merges. Merge stays
+  human / pr-reviewer driven.
+- **One manifest schema (FR-7 / §6).** Community addons use the *identical*
+  manifest schema, `hapm.lock` schema, marker convention and enable/disable code
+  path as core addons. `author`/`origin` are written under `_provenance` as
+  audit metadata only and branch no code path. Deactivating a community addon
+  restores `SOUL.md` byte-for-byte, same as core.
+
+The seven Developer Acceptance Criteria are proven in
+`dashboard/tests/test_builder.py` (runs under pytest or stdlib-only).
+
 ## License
 
 MIT.
