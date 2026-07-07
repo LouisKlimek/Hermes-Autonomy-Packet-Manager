@@ -62,6 +62,19 @@ from .toggle import (
     enable_addon,
     list_active_addons,
 )
+from .apply import (
+    ApplyError,
+    ApplyResult,
+    PresetInfo,
+    WhitelistError,
+    apply_preset,
+    default_presets_root,
+    deep_merge,
+    list_presets,
+    resolve_preset,
+    revert_preset,
+    validate_fragment_whitelist,
+)
 
 __all__ = [
     # state
@@ -106,6 +119,18 @@ __all__ = [
     "disable_addon",
     "enable_addon",
     "list_active_addons",
+    # apply (FR-4)
+    "ApplyError",
+    "ApplyResult",
+    "PresetInfo",
+    "WhitelistError",
+    "apply_preset",
+    "default_presets_root",
+    "deep_merge",
+    "list_presets",
+    "resolve_preset",
+    "revert_preset",
+    "validate_fragment_whitelist",
 ]
 
 __version__ = "0.1.0"
