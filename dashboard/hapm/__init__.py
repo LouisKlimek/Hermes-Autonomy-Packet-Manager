@@ -82,6 +82,38 @@ from .apply import (
     revert_preset,
     validate_fragment_whitelist,
 )
+from .builder_sanitize import (
+    CURATED_SKILL_SOURCES,
+    FORBIDDEN_SOUL_HEADINGS,
+    SanitizeError,
+    SanitizeResult,
+    Violation,
+    assert_target_allowed,
+    check_addon,
+    check_content,
+    check_forbidden_soul_headings,
+    enumerate_targets,
+    make_addon_id,
+    slugify,
+    validate_addon_id,
+    validate_curated_skill,
+    validate_inline_skill,
+)
+from .builder_drafts import (
+    Draft,
+    DraftError,
+    DraftStore,
+    drafts_root,
+)
+from .builder_pr import (
+    BuilderPRError,
+    PRResult,
+    branch_for,
+    build_manifest,
+    materialize_addon,
+    open_addon_pr,
+    planned_files,
+)
 
 __all__ = [
     # state
@@ -138,6 +170,37 @@ __all__ = [
     "resolve_preset",
     "revert_preset",
     "validate_fragment_whitelist",
+<<<<<<< HEAD
+    # v1.2 builder — sanitizing / structural whitelist (Req 1, §4)
+    "CURATED_SKILL_SOURCES",
+    "FORBIDDEN_SOUL_HEADINGS",
+    "SanitizeError",
+    "SanitizeResult",
+    "Violation",
+    "assert_target_allowed",
+    "check_addon",
+    "check_content",
+    "check_forbidden_soul_headings",
+    "enumerate_targets",
+    "make_addon_id",
+    "slugify",
+    "validate_addon_id",
+    "validate_curated_skill",
+    "validate_inline_skill",
+    # v1.2 builder — local draft store (Req 2, §5)
+    "Draft",
+    "DraftError",
+    "DraftStore",
+    "drafts_root",
+    # v1.2 builder — PR activation path (Req 2/FR-7, §5/§6)
+    "BuilderPRError",
+    "PRResult",
+    "branch_for",
+    "build_manifest",
+    "materialize_addon",
+    "open_addon_pr",
+    "planned_files",
+=======
     # addon↔addon conflicts + guided resolution (FR-7 v1.1)
     "AddonAddonConflictError",
     "AddonConflict",
@@ -146,6 +209,7 @@ __all__ = [
     "ResolutionResult",
     "check_conflicts",
     "resolve_and_enable_addon",
+>>>>>>> origin/main
 ]
 
 __version__ = "0.1.0"
