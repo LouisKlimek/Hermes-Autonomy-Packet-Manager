@@ -52,15 +52,22 @@ from .registry import (
     load_registry,
 )
 from .toggle import (
+    AddonAddonConflictError,
     AddonAlreadyEnabledError,
+    AddonConflict,
     AddonConflictError,
     AddonNotCompatibleError,
     AddonNotEnabledError,
+    ConflictResult,
+    ResolutionError,
+    ResolutionResult,
     ToggleError,
     ToggleResult,
+    check_conflicts,
     disable_addon,
     enable_addon,
     list_active_addons,
+    resolve_and_enable_addon,
 )
 from .apply import (
     ApplyError,
@@ -131,6 +138,14 @@ __all__ = [
     "resolve_preset",
     "revert_preset",
     "validate_fragment_whitelist",
+    # addon↔addon conflicts + guided resolution (FR-7 v1.1)
+    "AddonAddonConflictError",
+    "AddonConflict",
+    "ConflictResult",
+    "ResolutionError",
+    "ResolutionResult",
+    "check_conflicts",
+    "resolve_and_enable_addon",
 ]
 
 __version__ = "0.1.0"

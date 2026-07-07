@@ -71,6 +71,21 @@ def validate_addon(addon_dir: Path, errors: list[str]) -> None:
     if manifest.get("id") not in (None, slug):
         _err(errors, slug, f"manifest.id '{manifest.get('id')}' != folder '{slug}'")
 
+    # conflicts_with (FR-7 v1.1): optional declarative addon↔addon
+    # incompatibility. Must be a list of addon-id strings; an addon may not
+    # list itself. Referenced ids need not be installed (a conflict target may
+    # legitimately be absent), so we validate structure only.
+    conflicts = manifest.get("conflicts_with")
+    if conflicts is not None:
+        if not isinstance(conflicts, list):
+            _err(errors, slug, "manifest.conflicts_with, if present, must be a list")
+        else:
+            for i, c in enumerate(conflicts):
+                if not isinstance(c, str):
+                    _err(errors, slug, f"conflicts_with[{i}] must be a string")
+                elif c == manifest.get("id", slug):
+                    _err(errors, slug, "conflicts_with may not include the addon itself")
+
     contributes = manifest.get("contributes")
     if isinstance(contributes, dict):
         _validate_contributes(errors, slug, contributes, "manifest")
