@@ -1,0 +1,13 @@
+{
+  "name": "hapm",
+  "label": "Autonomy Packet Manager",
+  "description": "Hermes Autonomy Packet Manager — apply base profile presets and toggle reversible behavior addons (e.g. YAGNI) on Hermes profiles from the dashboard, without editing SOUL.md / skills / config by hand. Scaffold shell; features land in later tasks.",
+  "icon": "Package",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/hapm",
+    "position": "after:skills"
+  },
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}
