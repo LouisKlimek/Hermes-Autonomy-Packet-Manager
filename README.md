@@ -66,6 +66,55 @@ GET /api/plugins/hapm/health   ->  {"plugin": "hapm", "status": "ok", "version":
 GET /api/plugins/hapm/ping     ->  {"pong": true}
 ```
 
+## Addon enable/disable engine (FR-6)
+
+The backend exposes a generic, reversible addon toggle engine on top of the
+FR-5 addon registry (`addons/`) and the FR-7 state/lock + backup primitives
+(`dashboard/hapm/`):
+
+```
+GET  /api/plugins/hapm/addons?target=<profile-or-preset>
+     -> addons whose manifest whitelist (compatible_profiles_or_presets)
+        admits <target> ("*" matches any); each carries an `enabled` flag
+        read from the profile's hapm.lock.
+
+POST /api/plugins/hapm/addons/enable
+     body: {"profile": "<name>", "addon": "<id>", "mode": "<mode?>",
+            "target": "<whitelist-target?>"}
+     -> inserts the addon's SOUL.md block wrapped in
+        `<!-- HAPM:addon:<id> START/END -->` and/or copies its skills into the
+        profile, recording everything in hapm.lock for reversal.
+
+POST /api/plugins/hapm/addons/disable
+     body: {"profile": "<name>", "addon": "<id>"}
+     -> removes exactly that addon's marked SOUL block and the skills it added
+        (restoring any shadowed pre-existing skill), leaving the rest of the
+        file/dir tree byte-identical.
+```
+
+Guarantees:
+
+- **Independence** — multiple addons toggle without touching each other's block
+  or skills.
+- **Whitelist enforcement** — enabling on a non-whitelisted target returns
+  `409 not_compatible` (never silently ignored).
+- **Conflict detection** — an untracked/foreign SOUL block for the same addon id
+  returns `409 conflict` rather than corrupting the file. v1 detects and reports
+  conflicts; it does not auto-resolve (PRD Non-Goal).
+- **Lock updated** on every enable/disable to reflect active addons + modes.
+
+### Verifying the engine
+
+```bash
+python3 dashboard/tests/test_addon_toggle.py   # stdlib-only, no pytest needed
+# or, with pytest installed:
+python3 -m pytest -q dashboard/tests
+```
+
+The headline test
+`test_two_independent_addons_disable_one_leaves_other_untouched` enables two
+independent addons, disables one, and asserts the other's block/skills are
+byte-identical while the disabled addon's contribution is byte-exactly removed.
 ## Per-profile status (FR-9)
 
 ```

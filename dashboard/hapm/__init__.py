@@ -42,6 +42,26 @@ from .index import (
     CentralIndex,
     default_index_path,
 )
+from .registry import (
+    COMPAT_ANY,
+    Addon,
+    AddonMode,
+    RegistryError,
+    compatible_addons,
+    load_addon,
+    load_registry,
+)
+from .toggle import (
+    AddonAlreadyEnabledError,
+    AddonConflictError,
+    AddonNotCompatibleError,
+    AddonNotEnabledError,
+    ToggleError,
+    ToggleResult,
+    disable_addon,
+    enable_addon,
+    list_active_addons,
+)
 
 __all__ = [
     # state
@@ -68,6 +88,24 @@ __all__ = [
     # index
     "CentralIndex",
     "default_index_path",
+    # registry (FR-6)
+    "Addon",
+    "AddonMode",
+    "COMPAT_ANY",
+    "RegistryError",
+    "compatible_addons",
+    "load_addon",
+    "load_registry",
+    # toggle engine (FR-6)
+    "AddonAlreadyEnabledError",
+    "AddonConflictError",
+    "AddonNotCompatibleError",
+    "AddonNotEnabledError",
+    "ToggleError",
+    "ToggleResult",
+    "disable_addon",
+    "enable_addon",
+    "list_active_addons",
 ]
 
 __version__ = "0.1.0"
