@@ -1,21 +1,33 @@
 # Hermes Autonomy Packet Manager (HAPM)
 
-A Hermes **dashboard plugin** that lets you personalize Hermes profiles from a
+A Hermes **plugin** that lets you personalize Hermes profiles from a
 single dashboard tab — apply base **profile presets** (SOUL.md + skills +
 general config) and toggle reversible behavior **addons** (e.g. YAGNI) — without
 editing profile files by hand. Every activation is designed to be fully
 reversible.
+
+HAPM is now a **full plugin** (agent half + dashboard half), structurally
+analogous to the [Tasklist plugin](https://github.com/LouisKlimek/Hermes-Tasklist-Plugin):
+a root `plugin.yaml` + `__init__.py` with `register(ctx)` make it discoverable
+and enable-able by the agent plugin loader, alongside the existing `dashboard/`
+UI half. In this version the agent half is a deliberate **no-op skeleton** —
+`register()` runs no hooks and applies no profile mutation; it exists so HAPM is
+recognized as a full agent plugin. Agent-tools / auto-hooks that apply
+presets/addons to profiles are a separate, human-gated addition. Install/enable
+works analogously to Tasklist.
 
 > **Status:** scaffold shell (FR-1). This repo currently ships only the
 > installable, mountable plugin skeleton — a sidebar tab, an empty frontend
 > view, and a health/ping backend. Profile discovery, preset/addon registries,
 > apply/revert state management (PRD FR-2..FR-9) land in later tasks.
 
-Built as a pure dashboard plugin, analogous to
+Built with both plugin halves, analogous to
 [LouisKlimek/Hermes-Tasklist-Plugin](https://github.com/LouisKlimek/Hermes-Tasklist-Plugin):
 
 ```
 Hermes-Autonomy-Packet-Manager/
+├── plugin.yaml              # agent-plugin metadata (name/version/description/author)
+├── __init__.py              # register(ctx) — v1 no-op skeleton (no hooks, no mutation)
 └── dashboard/
     ├── manifest.json        # plugin metadata + sidebar tab registration
     ├── plugin_api.py        # FastAPI backend, mounted at /api/plugins/hapm/
