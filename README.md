@@ -66,6 +66,40 @@ GET /api/plugins/hapm/health   ->  {"plugin": "hapm", "status": "ok", "version":
 GET /api/plugins/hapm/ping     ->  {"pong": true}
 ```
 
+## Per-profile status (FR-9)
+
+```
+GET /api/plugins/hapm/profiles/{profile}/status
+```
+
+Returns the profile's current HAPM state, read **live** from that profile's
+`hapm.lock` on every request (single source of truth — no caching that could
+drift from what an FR-4 preset-apply or FR-6 addon-toggle just wrote):
+
+```json
+{
+  "profile": "fullstack-developer",
+  "profile_dir": "/…/profiles/fullstack-developer",
+  "lock_present": true,
+  "active_preset": "fullstack-developer",
+  "addons": [
+    {"addon_id": "yagni", "mode": "prompt"},
+    {"addon_id": "tdd",   "mode": "full"}
+  ]
+}
+```
+
+- A profile HAPM has never touched (no `hapm.lock`) returns **200** with a
+  well-defined empty state (`lock_present: false`, `active_preset: null`,
+  `addons: []`), not an error.
+- Structured JSON errors (never a 500 stack trace): `invalid_profile_name`
+  (400, path-traversal guard), `profile_not_found` (404), `corrupt_hapm_lock`
+  (500).
+
+Verification (documented in `dashboard/test_status_endpoint.py`): apply a
+preset + enable 2 addons, call status and confirm it matches; disable 1 addon,
+call status again, confirm it updated — proving reads are never stale.
+
 ## License
 
 MIT.
