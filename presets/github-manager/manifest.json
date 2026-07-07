@@ -1,0 +1,14 @@
+{
+  "slug": "github-manager",
+  "name": "GitHub Manager",
+  "description": "Manages GitHub repositories, branches, issues, and pull request hygiene using the gh CLI and git.",
+  "version": "1.0.0",
+  "compatibleAddons": [
+    "*"
+  ],
+  "markers": [
+    "github",
+    "repo-management",
+    "operations"
+  ]
+}

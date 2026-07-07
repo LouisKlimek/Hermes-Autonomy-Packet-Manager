@@ -1,0 +1,18 @@
+# General-Config fragment for the Fullstack Developer preset.
+# Only whitelisted, role-defining keys (OQ-2, CEO-confirmed). Applied as a
+# merge/patch fragment onto profiles/<profile>/config.yaml — never a full overwrite.
+agent:
+  max_turns: 40
+  reasoning_effort: medium
+  disabled_toolsets: []
+toolsets:
+  - file
+  - terminal
+  - web
+  - delegation
+delegation:
+  enabled: false
+kanban:
+  default_assignee: fullstack-developer
+approvals:
+  mode: auto

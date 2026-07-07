@@ -1,0 +1,19 @@
+# General-Config fragment for the CEO (Orchestrator) preset.
+# Only whitelisted, role-defining keys (OQ-2, CEO-confirmed). Merge/patch fragment only.
+# This is the one preset that is allowed to orchestrate (delegation enabled).
+agent:
+  max_turns: 50
+  reasoning_effort: high
+  disabled_toolsets: []
+toolsets:
+  - file
+  - terminal
+  - web
+  - delegation
+delegation:
+  enabled: true
+  max_concurrent_children: 3
+kanban:
+  default_assignee: ceo-orchestrator
+approvals:
+  mode: auto

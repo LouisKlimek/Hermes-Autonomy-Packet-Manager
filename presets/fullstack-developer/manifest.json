@@ -1,0 +1,14 @@
+{
+  "slug": "fullstack-developer",
+  "name": "Fullstack Developer",
+  "description": "Implements software tasks end to end: branches, commits, pushes, and opens focused pull requests for review.",
+  "version": "1.0.0",
+  "compatibleAddons": [
+    "*"
+  ],
+  "markers": [
+    "engineering",
+    "implementation",
+    "github"
+  ]
+}
