@@ -1,0 +1,44 @@
+{
+  "id": "yagni",
+  "name": "YAGNI Principles",
+  "description": "Enforces 'You Aren't Gonna Need It' discipline: build the smallest correct change, avoid speculative abstractions and future-proofing.",
+  "version": "0.1.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": true
+  },
+  "compatible_profiles_or_presets": [
+    "fullstack-developer",
+    "fullstack-developer-preset"
+  ],
+  "modes": [
+    {
+      "id": "ponytail",
+      "name": "Ponytail",
+      "description": "Activates YAGNI via the external DietrichGebert/ponytail ruleset/skills (skills-based). Content filled by FR-8.",
+      "contributes": {
+        "soul_block": false,
+        "skills": true
+      }
+    },
+    {
+      "id": "prompt",
+      "name": "Prompt",
+      "description": "Inserts a short YAGNI prompt block into the profile's SOUL.md (no external repo).",
+      "contributes": {
+        "soul_block": true,
+        "skills": false
+      },
+      "default": true
+    },
+    {
+      "id": "off",
+      "name": "Off",
+      "description": "Addon present but inactive; contributes nothing.",
+      "contributes": {
+        "soul_block": false,
+        "skills": false
+      }
+    }
+  ]
+}
