@@ -65,12 +65,10 @@ def test_clean_install_registers_profiles_route(tmp_path: Path):
         app = FastAPI()
         app.include_router(module.router, prefix="/api/plugins/hapm")
 
-        route = next(
-            route
-            for route in app.routes
-            if getattr(route, "path", None) == "/api/plugins/hapm/profiles"
-            and "GET" in getattr(route, "methods", set())
-        )
+        # Router internals vary across supported FastAPI/Starlette versions
+        # (some represent included routers as a mounted route).  Exercising the
+        # public URL is the stable registration contract: a missing mount would
+        # return the dashboard's 404 instead of this successful response.
         response = TestClient(app).get("/api/plugins/hapm/profiles")
         assert response.status_code == 200
         # The exact HTTP request returns only profile names and paths — never
