@@ -170,7 +170,6 @@ __all__ = [
     "resolve_preset",
     "revert_preset",
     "validate_fragment_whitelist",
-<<<<<<< HEAD
     # v1.2 builder — sanitizing / structural whitelist (Req 1, §4)
     "CURATED_SKILL_SOURCES",
     "FORBIDDEN_SOUL_HEADINGS",
@@ -200,7 +199,6 @@ __all__ = [
     "materialize_addon",
     "open_addon_pr",
     "planned_files",
-=======
     # addon↔addon conflicts + guided resolution (FR-7 v1.1)
     "AddonAddonConflictError",
     "AddonConflict",
@@ -209,7 +207,6 @@ __all__ = [
     "ResolutionResult",
     "check_conflicts",
     "resolve_and_enable_addon",
->>>>>>> origin/main
 ]
 
 __version__ = "0.1.0"
