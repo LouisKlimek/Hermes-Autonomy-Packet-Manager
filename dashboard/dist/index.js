@@ -67,6 +67,7 @@
   var useState = React.useState;
   var useEffect = React.useEffect;
   var useCallback = React.useCallback;
+  var useRef = React.useRef;
 
   var API = "/api/plugins/hapm";
 
@@ -1898,6 +1899,9 @@
     var addonsErr = addonsErrState[0];
     var setAddonsErr = addonsErrState[1];
 
+    // Only the newest addon request may update this panel's state.
+    var addonRequestSequence = useRef(0);
+
     // In-flight addon id (disables that row's controls while toggling).
     var busyAddonState = useState(null);
     var busyAddon = busyAddonState[0];
@@ -1987,8 +1991,11 @@
     }, []);
 
     var loadAddons = useCallback(function (profileName) {
+      var requestSequence = ++addonRequestSequence.current;
       if (!profileName) {
         setAddons([]);
+        setAddonsLoading(false);
+        setAddonsErr(null);
         return Promise.resolve();
       }
       setAddonsLoading(true);
@@ -2000,10 +2007,12 @@
         encodeURIComponent(profileName);
       return apiGet(q)
         .then(function (data) {
+          if (requestSequence !== addonRequestSequence.current) return;
           setAddons((data && data.addons) || []);
           setAddonsLoading(false);
         })
         .catch(function (err) {
+          if (requestSequence !== addonRequestSequence.current) return;
           setAddonsLoading(false);
           setAddons([]);
           setAddonsErr(err);
