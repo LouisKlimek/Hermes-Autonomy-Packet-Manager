@@ -11,7 +11,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .registry import Addon, RegistryError, load_addon
+from .registry import Addon, RegistryError, load_addon, load_registry
 
 CUSTOM_ADDONS_DIRNAME = "hapm-custom-addons"
 _SLUG_RE = re.compile(r"[A-Za-z0-9._-]+")
@@ -30,6 +30,14 @@ def custom_addons_root(hermes_home: Path | None = None) -> Path:
         value = os.environ.get("HERMES_HOME", "").strip()
         home = Path(value) if value else Path.home() / ".hermes"
     return home / CUSTOM_ADDONS_DIRNAME
+
+
+def default_shipped_addons_root() -> Path:
+    """Return the immutable shipped-addon registry, honoring test overrides."""
+    value = os.environ.get("HAPM_ADDONS_ROOT", "").strip()
+    if value:
+        return Path(value)
+    return Path(__file__).resolve().parents[2] / "addons"
 
 
 @dataclass(frozen=True)
@@ -84,8 +92,18 @@ def _normalize(payload: dict, *, fixed_id: str | None = None) -> tuple[dict, str
 class CustomAddonStore:
     """Stores only full addon packages under the HAPM user-owned boundary."""
 
-    def __init__(self, root: str | Path | None = None, hermes_home: Path | None = None):
+    def __init__(
+        self,
+        root: str | Path | None = None,
+        hermes_home: Path | None = None,
+        shipped_addons_root: str | Path | None = None,
+    ):
         self.root = Path(root) if root is not None else custom_addons_root(hermes_home)
+        self.shipped_addons_root = (
+            Path(shipped_addons_root)
+            if shipped_addons_root is not None
+            else default_shipped_addons_root()
+        )
 
     def _directory(self, addon_id: str) -> Path:
         if not _SLUG_RE.fullmatch(addon_id):
@@ -119,6 +137,12 @@ class CustomAddonStore:
     def _name_exists(self, name: str, *, except_id: str | None = None) -> bool:
         return any(addon.name.casefold() == name.casefold() and addon.id != except_id for addon in self.list())
 
+    def _is_shipped_id(self, addon_id: str) -> bool:
+        try:
+            return any(addon.id == addon_id for addon in load_registry(self.shipped_addons_root))
+        except RegistryError:
+            return False
+
     def _write(self, directory: Path, manifest: dict, soul_block: str) -> CustomAddon:
         self.root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=".hapm-custom-", dir=self.root))
@@ -145,6 +169,10 @@ class CustomAddonStore:
     def create(self, payload: dict) -> CustomAddon:
         manifest, soul_block = _normalize(payload)
         directory = self._directory(manifest["id"])
+        if self._is_shipped_id(manifest["id"]):
+            raise CustomAddonError(
+                f"Custom addon id {manifest['id']!r} is reserved by a shipped addon."
+            )
         if directory.exists():
             raise CustomAddonError(f"A custom addon with id {manifest['id']!r} already exists.")
         if self._name_exists(manifest["name"]):

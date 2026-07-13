@@ -38,3 +38,41 @@ def test_custom_routes_keep_builtin_registry_unchanged_and_export_package():
                 os.environ.pop("HAPM_CUSTOM_ADDONS_ROOT", None)
             else:
                 os.environ["HAPM_CUSTOM_ADDONS_ROOT"] = old
+
+
+def test_addon_directory_prefers_shipped_package_over_legacy_custom_collision():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        shipped = root / "addons" / "shared-addon"
+        custom = root / "custom" / "shared-addon"
+        shipped.mkdir(parents=True)
+        custom.mkdir(parents=True)
+        for directory, name in ((shipped, "Shipped addon"), (custom, "Custom collision")):
+            (directory / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "id": "shared-addon",
+                        "name": name,
+                        "description": "Test addon.",
+                        "version": "1.0.0",
+                        "contributes": {"soul_block": True, "skills": False},
+                        "compatible_profiles_or_presets": ["*"],
+                    }
+                )
+            )
+
+        old_custom = os.environ.get("HAPM_CUSTOM_ADDONS_ROOT")
+        old_registry = os.environ.get("HAPM_ADDONS_ROOT")
+        os.environ["HAPM_CUSTOM_ADDONS_ROOT"] = str(root / "custom")
+        os.environ["HAPM_ADDONS_ROOT"] = str(root / "addons")
+        try:
+            assert plugin_api._addon_directory("shared-addon") == shipped
+        finally:
+            if old_custom is None:
+                os.environ.pop("HAPM_CUSTOM_ADDONS_ROOT", None)
+            else:
+                os.environ["HAPM_CUSTOM_ADDONS_ROOT"] = old_custom
+            if old_registry is None:
+                os.environ.pop("HAPM_ADDONS_ROOT", None)
+            else:
+                os.environ["HAPM_ADDONS_ROOT"] = old_registry

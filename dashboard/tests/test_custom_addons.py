@@ -57,6 +57,33 @@ def test_create_rejects_duplicate_id_and_name():
                 pass
 
 
+def test_create_rejects_id_reserved_by_shipped_addon():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        registry = root / "addons"
+        shipped = registry / "shipped-addon"
+        shipped.mkdir(parents=True)
+        (shipped / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "id": "shipped-addon",
+                    "name": "Shipped addon",
+                    "description": "Built in.",
+                    "version": "1.0.0",
+                    "contributes": {"soul_block": True, "skills": False},
+                    "compatible_profiles_or_presets": ["*"],
+                }
+            )
+        )
+        store = CustomAddonStore(root / "custom", shipped_addons_root=registry)
+
+        try:
+            store.create(_payload(addon_id="shipped-addon"))
+            raise AssertionError("expected shipped addon id rejection")
+        except CustomAddonError as exc:
+            assert "reserved by a shipped addon" in str(exc)
+
+
 def test_update_preserves_identity_and_cancel_never_mutates():
     with tempfile.TemporaryDirectory() as td:
         store = CustomAddonStore(Path(td) / "custom")

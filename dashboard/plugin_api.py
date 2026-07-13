@@ -137,11 +137,14 @@ def _custom_store() -> CustomAddonStore:
 
 
 def _addon_directory(addon_id: str) -> Path:
-    """Resolve a custom package before falling back to immutable shipped addons."""
+    """Resolve immutable shipped addons before user-owned custom packages."""
+    shipped = _addons_root() / addon_id
+    if (shipped / "manifest.json").is_file():
+        return shipped
     try:
         return _custom_store().load(addon_id).addon.directory
     except CustomAddonError:
-        return _addons_root() / addon_id
+        return shipped
 
 
 def _profile_dir(profile: str) -> Path:
