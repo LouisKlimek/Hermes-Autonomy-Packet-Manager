@@ -266,8 +266,8 @@
         presetName +
         "\" will overwrite SOUL.md, skills, and the allowed configuration fields of profile \"" +
         profileName +
-        "\". The current state is automatically backed up beforehand and can be restored at any time, as long as no further changes have been made.",
-      "Active addons on this profile are preserved where possible, provided they are compatible with the new preset. Incompatible addons are automatically disabled.",
+        "\".",
+      "The current state is automatically backed up beforehand and can be restored by reverting this preset.",
     ];
   }
 
@@ -437,6 +437,54 @@
   function ConfirmDialog(props) {
     // props: presetName, profileName, busy, errorNode, onCancel, onConfirm
     var bodyLines = dialogBody(props.presetName, props.profileName);
+    var titleId = "hapm-preset-confirm-title";
+    var dialogRef = React.useRef(null);
+    var cancelRef = React.useRef(null);
+    var triggerRef = React.useRef(null);
+
+    // Focus the safe action first and return focus to the Apply trigger on close.
+    useEffect(function () {
+      triggerRef.current =
+        (typeof document !== "undefined" && document.activeElement) || null;
+      if (cancelRef.current) {
+        try {
+          cancelRef.current.focus();
+        } catch (e) {}
+      }
+      return function () {
+        var trigger = triggerRef.current;
+        if (trigger && typeof trigger.focus === "function") {
+          try {
+            trigger.focus();
+          } catch (e) {}
+        }
+      };
+    }, []);
+
+    function onKeyDown(e) {
+      if (e.key === "Escape" || e.key === "Esc") {
+        if (!props.busy) {
+          e.preventDefault();
+          props.onCancel();
+        }
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var root = dialogRef.current;
+      if (!root) return;
+      var focusable = root.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), ' +
+          '[tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey ? active === first || !root.contains(active) : active === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    }
     return h(
       "div",
       {
@@ -453,13 +501,15 @@
         onClick: function (e) {
           if (e.target === e.currentTarget && !props.busy) props.onCancel();
         },
+        onKeyDown: onKeyDown,
       },
       h(
         "div",
         {
+          ref: dialogRef,
           role: "dialog",
           "aria-modal": "true",
-          "aria-label": COPY.dialogTitle,
+          "aria-labelledby": titleId,
           style: {
             background: C.panel,
             color: C.text,
@@ -472,9 +522,24 @@
           },
         },
         h(
-          "h2",
-          { style: { fontSize: 17, fontWeight: 700, margin: "0 0 12px" } },
-          COPY.dialogTitle
+          "div",
+          { style: { display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 12 } },
+          h(
+            "h2",
+            { id: titleId, style: { fontSize: 17, fontWeight: 700, margin: 0 } },
+            COPY.dialogTitle
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              "aria-label": COPY.dismiss,
+              disabled: !!props.busy,
+              onClick: props.onCancel,
+              style: { background: "transparent", border: "none", color: C.text, fontSize: 20, lineHeight: 1, cursor: props.busy ? "not-allowed" : "pointer", padding: "0 4px" },
+            },
+            "\u00d7"
+          )
         ),
         bodyLines.map(function (line, i) {
           return h(
@@ -499,6 +564,7 @@
               display: "flex",
               justifyContent: "flex-end",
               gap: 10,
+              flexWrap: "wrap",
               marginTop: 16,
             },
           },
@@ -506,6 +572,7 @@
             Button,
             {
               kind: "secondary",
+              buttonRef: cancelRef,
               disabled: props.busy,
               onClick: props.onCancel,
             },
@@ -1027,6 +1094,7 @@
     var busyState = useState(false);
     var busy = busyState[0];
     var setBusy = busyState[1];
+    var applyInFlightRef = React.useRef(false);
 
     var dialogErrState = useState(null);
     var dialogErr = dialogErrState[0];
@@ -1075,6 +1143,8 @@
     }
 
     async function doApply() {
+      if (applyInFlightRef.current) return;
+      applyInFlightRef.current = true;
       setBusy(true);
       setDialogErr(null);
       try {
@@ -1088,6 +1158,8 @@
       } catch (err) {
         setBusy(false);
         setDialogErr(applyErrorNode(err));
+      } finally {
+        applyInFlightRef.current = false;
       }
     }
 
