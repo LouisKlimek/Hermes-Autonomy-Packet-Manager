@@ -534,8 +534,13 @@
             {
               type: "button",
               "aria-label": COPY.dismiss,
-              disabled: !!props.busy,
-              onClick: props.onCancel,
+              // Keep a focusable modal target while requests are in flight.
+              // It is intentionally aria-disabled rather than disabled so the
+              // dialog's Tab containment never degenerates to zero targets.
+              "aria-disabled": !!props.busy,
+              onClick: function () {
+                if (!props.busy) props.onCancel();
+              },
               style: { background: "transparent", border: "none", color: C.text, fontSize: 20, lineHeight: 1, cursor: props.busy ? "not-allowed" : "pointer", padding: "0 4px" },
             },
             "\u00d7"
