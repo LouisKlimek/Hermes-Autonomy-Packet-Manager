@@ -1,0 +1,14 @@
+{
+  "id": "github-manager-repository-scope",
+  "name": "GitHub Manager Repository Scope",
+  "description": "GitHub Manager Repository Scope.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "github-manager"
+  ],
+  "conflicts_with": []
+}

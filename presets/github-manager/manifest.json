@@ -1,14 +1,16 @@
 {
   "slug": "github-manager",
   "name": "GitHub Manager",
-  "description": "Manages GitHub repositories, branches, issues, and pull request hygiene using the gh CLI and git.",
-  "version": "1.0.0",
+  "description": "Integrates eligible pull requests only after required gates pass.",
+  "version": "2.0.0",
   "compatibleAddons": [
-    "*"
+    "github-automerge-governance",
+    "github-manager-repository-scope",
+    "postmerge-no-qa-deploy"
   ],
   "markers": [
     "github",
-    "repo-management",
-    "operations"
+    "integration",
+    "quality-gate"
   ]
 }

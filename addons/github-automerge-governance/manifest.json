@@ -1,0 +1,14 @@
+{
+  "id": "github-automerge-governance",
+  "name": "GitHub Auto-Merge Governance",
+  "description": "GitHub Auto-Merge Governance.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "github-manager"
+  ],
+  "conflicts_with": []
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "evidence-quality-analyst",
+  "name": "Evidence Quality Analyst",
+  "description": "Assesses evidence quality and recommends its fitness for a decision.",
+  "version": "2.0.0",
+  "compatibleAddons": [
+    "evidence-assessment-governance",
+    "workflow-context-governance"
+  ],
+  "markers": [
+    "evidence",
+    "analysis",
+    "governance"
+  ]
+}

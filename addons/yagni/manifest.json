@@ -9,7 +9,10 @@
   },
   "compatible_profiles_or_presets": [
     "fullstack-developer",
-    "fullstack-developer-preset"
+    "fullstack-developer-preset",
+    "designer",
+    "prd-bridge",
+    "prd-task-planner"
   ],
   "modes": [
     {

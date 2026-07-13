@@ -1,10 +1,11 @@
 {
   "slug": "pr-reviewer",
   "name": "PR Reviewer",
-  "description": "Reviews pull requests for correctness, risk, and quality; approves or requests changes but never merges.",
-  "version": "1.0.0",
+  "description": "Independently reviews pull requests and decides the next review-pipeline step.",
+  "version": "2.0.0",
   "compatibleAddons": [
-    "*"
+    "pr-review-governance",
+    "postmerge-no-qa-deploy"
   ],
   "markers": [
     "github",

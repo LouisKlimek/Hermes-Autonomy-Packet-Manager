@@ -1,0 +1,14 @@
+{
+  "id": "memory-curation-governance",
+  "name": "Memory Curation Governance",
+  "description": "Memory Curation Governance.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "memory-curator"
+  ],
+  "conflicts_with": []
+}
