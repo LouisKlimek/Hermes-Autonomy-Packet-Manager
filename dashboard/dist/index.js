@@ -82,7 +82,7 @@
       "@keyframes hapm-spin{to{transform:rotate(360deg)}}" +
       "@media (max-width:560px){" +
       ".hapm-conflict-footer{flex-direction:column-reverse;align-items:stretch}" +
-      ".hapm-conflict-footer>button{width:100%}" +
+      ".hapm-conflict-footer>button,.hapm-detail-footer>button{width:100%}" +
       "}";
     try {
       var el = document.createElement("style");
@@ -120,6 +120,25 @@
     applying: "Applying …",
     cancel: "Cancel",
     dismiss: "Close",
+    details: "Details",
+    detailsDialogLabel: "Item details",
+    detailsPurpose: "Purpose",
+    detailsEffects: "Effects and capabilities",
+    detailsCompatibility: "Availability and compatibility",
+    detailsDescriptionFallback: "No description is available from this registry entry.",
+    detailsNoEffects: "This registry entry does not declare user-visible effects.",
+    presetDetailEffect:
+      "Applying this preset changes the selected profile's SOUL.md, skills, and allowed configuration.",
+    presetDetailActive: "This is the active preset for the selected profile.",
+    presetDetailInactive: "This preset is available to apply to the selected profile.",
+    addonDetailActive: "This addon is active for the selected profile.",
+    addonDetailAvailable: "This addon is available for the selected profile.",
+    addonDetailNoPresetAvailable:
+      "No active preset is selected. This compatible addon remains available through its profile controls.",
+    addonDetailControlsBusy:
+      "Its enable controls are temporarily unavailable while another change is in progress.",
+    addonDetailCompatibility: "Compatible with: ",
+    addonDetailNoCompatibility: "No compatibility information is available from this registry entry.",
     dialogTitle: "Apply preset?",
     statusHeaderPrefix: "Status: ",
     activePresetLabel: "Active preset: ",
@@ -425,10 +444,121 @@
         type: "button",
         ref: props.buttonRef || undefined,
         disabled: !!props.disabled,
+        "aria-label": props["aria-label"] || undefined,
         onClick: props.onClick,
         style: Object.assign(base, props.style || {}),
       },
       props.children
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Read-only item-detail dialog. It derives all copy from the already-loaded
+  // registry/API summaries and intentionally has no API action handlers.
+  // ---------------------------------------------------------------------------
+  function DetailDialog(props) {
+    var titleId = "hapm-detail-title";
+    var closeRef = React.useRef(null);
+    var dialogRef = React.useRef(null);
+    var triggerRef = React.useRef(null);
+    var item = props.item || {};
+    var effects = props.effects || [];
+
+    useEffect(function () {
+      triggerRef.current =
+        (typeof document !== "undefined" && document.activeElement) || null;
+      if (closeRef.current) closeRef.current.focus();
+      return function () {
+        var trigger = triggerRef.current;
+        if (trigger && typeof trigger.focus === "function") trigger.focus();
+      };
+    }, []);
+
+    function focusableElements() {
+      if (!dialogRef.current) return [];
+      return Array.prototype.slice.call(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+    }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape" || e.key === "Esc") {
+        e.preventDefault();
+        props.onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var focusable = focusableElements();
+      if (!focusable.length) {
+        e.preventDefault();
+        if (dialogRef.current) dialogRef.current.focus();
+        return;
+      }
+      var active = typeof document !== "undefined" ? document.activeElement : null;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (e.shiftKey && (!dialogRef.current.contains(active) || active === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!dialogRef.current.contains(active) || active === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    function section(label, content) {
+      return h(
+        "div",
+        { style: { marginTop: 14 } },
+        h("div", { style: { fontSize: 12, fontWeight: 700, opacity: 0.65 } }, label),
+        h(
+          "div",
+          { style: { fontSize: 13, lineHeight: 1.5, marginTop: 4, overflowWrap: "anywhere" } },
+          content
+        )
+      );
+    }
+
+    return h(
+      "div",
+      {
+        role: "presentation",
+        style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000, padding: 16 },
+        onClick: function (e) { if (e.target === e.currentTarget) props.onClose(); },
+      },
+      h(
+        "div",
+        {
+          role: "dialog",
+          ref: dialogRef,
+          tabIndex: -1,
+          "aria-modal": "true",
+          "aria-labelledby": titleId,
+          onKeyDown: onKeyDown,
+          style: { background: C.panel, color: C.text, border: "1px solid " + C.border, borderRadius: 12, maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,0.45)" },
+        },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 } },
+          h("h2", { id: titleId, style: { fontSize: 17, fontWeight: 700, margin: 0, overflowWrap: "anywhere" } }, item.name || item.id || item.slug),
+          h(Button, { buttonRef: closeRef, kind: "secondary", onClick: props.onClose, "aria-label": COPY.dismiss, style: { flex: "0 0 auto" } }, COPY.dismiss)
+        ),
+        section(COPY.detailsPurpose, item.description || COPY.detailsDescriptionFallback),
+        section(
+          COPY.detailsEffects,
+          effects.length
+            ? h("ul", { style: { margin: "4px 0 0", paddingLeft: 20 } }, effects.map(function (effect, index) { return h("li", { key: index, style: { marginBottom: 4 } }, effect); }))
+            : COPY.detailsNoEffects
+        ),
+        section(COPY.detailsCompatibility, props.availability || COPY.addonDetailNoCompatibility),
+        h(
+          "div",
+          { className: "hapm-detail-footer", style: { display: "flex", justifyContent: "flex-end", marginTop: 20 } },
+          h(Button, { kind: "secondary", onClick: props.onClose }, COPY.dismiss)
+        )
+      )
     );
   }
 
@@ -1025,6 +1155,10 @@
     var dialogOpen = dialogState[0];
     var setDialogOpen = dialogState[1];
 
+    var detailsState = useState(false);
+    var detailsOpen = detailsState[0];
+    var setDetailsOpen = detailsState[1];
+
     var busyState = useState(false);
     var busy = busyState[0];
     var setBusy = busyState[1];
@@ -1252,6 +1386,11 @@
         ),
         h(
           Button,
+          { kind: "secondary", disabled: !selSlug, onClick: function () { setDetailsOpen(true); } },
+          COPY.details
+        ),
+        h(
+          Button,
           { kind: "primary", disabled: !canApply, onClick: openConfirm },
           COPY.applyButton
         )
@@ -1277,6 +1416,21 @@
           },
           selDesc.description
         )
+      );
+    }
+
+    if (detailsOpen && selDesc) {
+      children.push(
+        h(DetailDialog, {
+          key: "preset-details",
+          item: selDesc,
+          effects: [COPY.presetDetailEffect],
+          availability:
+            selDesc.slug === activePreset
+              ? COPY.presetDetailActive
+              : COPY.presetDetailInactive,
+          onClose: function () { setDetailsOpen(false); },
+        })
       );
     }
 
@@ -1396,6 +1550,34 @@
     var enabled = !!addon.enabled;
     var modes = addon.modes || [];
     var placeholder = DISABLED_MODE_PLACEHOLDERS[addon.id];
+    var detailsState = useState(false);
+    var detailsOpen = detailsState[0];
+    var setDetailsOpen = detailsState[1];
+
+    function addonEffects() {
+      var effects = [];
+      var contributes = addon.contributes || {};
+      if (contributes.soul_block) effects.push("Adds a reversible SOUL.md behavior block.");
+      if (contributes.skills) effects.push("Adds reversible skills to the selected profile.");
+      modes.forEach(function (mode) {
+        if (mode && mode.description) effects.push((mode.name || mode.id) + ": " + mode.description);
+      });
+      return effects;
+    }
+
+    function addonAvailability() {
+      var compatibility = addon.compatible_profiles_or_presets;
+      var source = compatibility && compatibility.length
+        ? COPY.addonDetailCompatibility + compatibility.join(", ") + "."
+        : COPY.addonDetailNoCompatibility;
+      var state = enabled
+        ? COPY.addonDetailActive
+        : props.activePreset
+        ? COPY.addonDetailAvailable + " Active preset: " + props.activePreset + "."
+        : COPY.addonDetailAvailable + " " + COPY.addonDetailNoPresetAvailable;
+      if (props.busy) state += " " + COPY.addonDetailControlsBusy;
+      return state + " " + source;
+    }
 
     // "Real" (selectable) non-off modes, e.g. YAGNI's "Prompt".
     var realModes = modes.filter(function (m) {
@@ -1456,7 +1638,12 @@
                 },
                 addon.description
               )
-            : null
+            : null,
+          h(
+            Button,
+            { kind: "secondary", onClick: function () { setDetailsOpen(true); }, style: { marginTop: 9 } },
+            COPY.details
+          )
         ),
         // On/off toggle switch (simple addons only).
         !isModal
@@ -1588,6 +1775,18 @@
       );
     }
 
+    if (detailsOpen) {
+      children.push(
+        h(DetailDialog, {
+          key: "addon-details",
+          item: addon,
+          effects: addonEffects(),
+          availability: addonAvailability(),
+          onClose: function () { setDetailsOpen(false); },
+        })
+      );
+    }
+
     return h(
       "div",
       {
@@ -1604,8 +1803,9 @@
   }
 
   function AddonSection(props) {
-    // props: profile, target, addons, loading, error, errorNode, busyAddonId,
+    // props: profile, target, activePreset, addons, loading, error, errorNode, busyAddonId,
     //        activeModes (id->mode), onEnable, onDisable, onRetry
+    var activePreset = props.activePreset || null;
     var children = [
       h(
         "div",
@@ -1725,6 +1925,7 @@
             addon: addon,
             profile: props.profile,
             target: props.target,
+            activePreset: activePreset,
             activeMode: props.activeModes ? props.activeModes[addon.id] : null,
             busy: props.busyAddonId === addon.id,
             onEnable: props.onEnable,
@@ -1756,6 +1957,41 @@
     var activePreset =
       status && status.active_preset ? status.active_preset : null;
     var addons = (status && status.addons) || [];
+    var detailState = useState(null);
+    var detail = detailState[0];
+    var setDetail = detailState[1];
+
+    function presetDetails() {
+      var preset = (props.presets || []).filter(function (p) {
+        return p && p.slug === activePreset;
+      })[0] || { id: activePreset, name: activePreset };
+      setDetail({
+        item: preset,
+        effects: [COPY.presetDetailEffect],
+        availability: COPY.presetDetailActive,
+      });
+    }
+
+    function addonDetails(statusAddon) {
+      var addon = (props.addons || []).filter(function (candidate) {
+        return candidate && candidate.id === statusAddon.addon_id;
+      })[0] || { id: statusAddon.addon_id, name: statusAddon.addon_id };
+      var effects = [];
+      var contributes = addon.contributes || {};
+      if (contributes.soul_block) effects.push("Adds a reversible SOUL.md behavior block.");
+      if (contributes.skills) effects.push("Adds reversible skills to the selected profile.");
+      (addon.modes || []).forEach(function (mode) {
+        if (mode && mode.description) effects.push((mode.name || mode.id) + ": " + mode.description);
+      });
+      var compatibility = addon.compatible_profiles_or_presets;
+      var availability = COPY.addonDetailActive +
+        (statusAddon.mode ? " " + COPY.statusModePrefix + statusAddon.mode + "." : "") +
+        " " +
+        (compatibility && compatibility.length
+          ? COPY.addonDetailCompatibility + compatibility.join(", ") + "."
+          : COPY.addonDetailNoCompatibility);
+      setDetail({ item: addon, effects: effects, availability: availability });
+    }
 
     return h(
       "div",
@@ -1784,15 +2020,25 @@
         ),
         h(
           "div",
-          {
-            style: {
-              fontSize: 14,
-              fontWeight: 600,
-              marginTop: 2,
-              opacity: activePreset ? 1 : 0.6,
+          { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 2 } },
+          h(
+            "div",
+            {
+              style: {
+                fontSize: 14,
+                fontWeight: 600,
+                opacity: activePreset ? 1 : 0.6,
+              },
             },
-          },
-          activePreset || COPY.statusNoPreset
+            activePreset || COPY.statusNoPreset
+          ),
+          activePreset
+            ? h(
+                Button,
+                { key: "status-preset-details", kind: "secondary", onClick: presetDetails },
+                COPY.details
+              )
+            : null
         )
       ),
       // Active addons list.
@@ -1825,21 +2071,41 @@
                   "div",
                   {
                     key: (a.addon_id || "addon") + "_" + i,
-                    style: {
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      padding: "5px 11px",
-                      borderRadius: 999,
-                      background: "rgba(110,168,254,0.16)",
-                      border: "1px solid " + C.okBorder,
-                    },
+                    style: { display: "flex", alignItems: "center", gap: 6 },
                   },
-                  (a.addon_id || "—") +
-                    (mode ? "  ·  " + COPY.statusModePrefix + mode : "")
+                  h(
+                    "div",
+                    {
+                      style: {
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        padding: "5px 11px",
+                        borderRadius: 999,
+                        background: "rgba(110,168,254,0.16)",
+                        border: "1px solid " + C.okBorder,
+                      },
+                    },
+                    (a.addon_id || "—") +
+                      (mode ? "  ·  " + COPY.statusModePrefix + mode : "")
+                  ),
+                  h(
+                    Button,
+                    { key: "status-addon-details", kind: "secondary", onClick: function () { addonDetails(a); } },
+                    COPY.details
+                  )
                 );
               })
             )
-      )
+      ),
+      detail
+        ? h(DetailDialog, {
+            key: "status-details-dialog",
+            item: detail.item,
+            effects: detail.effects,
+            availability: detail.availability,
+            onClose: function () { setDetail(null); },
+          })
+        : null
     );
   }
 
@@ -2355,6 +2621,7 @@
                 h(AddonSection, {
                   profile: selected,
                   target: selected,
+                  activePreset: selectedStatus && selectedStatus.active_preset,
                   addons: addons,
                   loading: addonsLoading,
                   error: addonsErr,
@@ -2367,7 +2634,12 @@
                     if (selected) loadAddons(selected);
                   },
                 }),
-                h(StatusView, { profile: selected, status: selectedStatus })
+                h(StatusView, {
+                  profile: selected,
+                  status: selectedStatus,
+                  presets: presets,
+                  addons: addons,
+                })
               )
             : h(
                 "div",
