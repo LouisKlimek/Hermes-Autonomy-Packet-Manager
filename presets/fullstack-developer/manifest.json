@@ -1,10 +1,13 @@
 {
   "slug": "fullstack-developer",
   "name": "Fullstack Developer",
-  "description": "Implements software tasks end to end: branches, commits, pushes, and opens focused pull requests for review.",
-  "version": "1.0.0",
+  "description": "Role-only preset for implementing scoped software work through reviewable pull requests.",
+  "version": "1.1.0",
   "compatibleAddons": [
-    "*"
+    "github-pr-automation",
+    "low-token-implementation",
+    "repository-scope",
+    "yagni"
   ],
   "markers": [
     "engineering",
