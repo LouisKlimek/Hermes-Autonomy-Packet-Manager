@@ -1,0 +1,13 @@
+{
+  "id": "github-pr-automation",
+  "name": "GitHub PR Automation",
+  "description": "Adds guarded GitHub pull-request automation and reviewer handoff policy for the Fullstack Developer preset.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "fullstack-developer"
+  ]
+}

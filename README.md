@@ -90,6 +90,10 @@ GET  /api/plugins/hapm/addons?target=<profile-or-preset>
         admits <target> ("*" matches any); each carries an `enabled` flag
         read from the profile's hapm.lock.
 
+Preset `compatibleAddons` declares the addon ids offered with that preset; each
+addon manifest then independently controls where it may be activated through
+`compatible_profiles_or_presets`.
+
 POST /api/plugins/hapm/addons/enable
      body: {"profile": "<name>", "addon": "<id>", "mode": "<mode?>",
             "target": "<whitelist-target?>"}
