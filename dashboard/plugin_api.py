@@ -96,6 +96,23 @@ def _hermes_home() -> Path:
     return Path(val) if val else (Path.home() / ".hermes")
 
 
+def _profiles_dir() -> Path:
+    """Return the explicit Hermes profile collection for this dashboard home.
+
+    Hermes normally uses ``$HERMES_HOME/profiles``. In isolated dashboard mode,
+    however, ``HERMES_HOME`` is one profile directory directly beneath the
+    collection (for example ``/opt/data/profiles/ceo-orchestrator``). Detect
+    only that documented shape; this intentionally does not search the
+    filesystem for other possible profile roots.
+    """
+    hermes_home = _hermes_home()
+    return (
+        hermes_home.parent
+        if hermes_home.parent.name == "profiles"
+        else hermes_home / "profiles"
+    )
+
+
 def _addons_root() -> Path:
     """Return the addon registry root (``addons/`` at the repo top level).
 
@@ -109,7 +126,7 @@ def _addons_root() -> Path:
 
 
 def _profile_dir(profile: str) -> Path:
-    return _hermes_home() / "profiles" / profile
+    return _profiles_dir() / profile
 
 
 def _err(status: int, error: str, message: str, **extra) -> JSONResponse:
@@ -139,23 +156,25 @@ def ping() -> dict:
 def list_profiles():
     """List locally available Hermes profiles (FR-2).
 
-    Reachable at ``GET /api/plugins/hapm/profiles``. Scans
-    ``$HERMES_HOME/profiles/`` and returns each immediate sub-directory as a
-    profile, so the UI can present a profile picker.
+    Reachable at ``GET /api/plugins/hapm/profiles``. Scans the resolved Hermes
+    profile collection and returns each immediate sub-directory as a profile,
+    so the UI can present a profile picker. The collection is
+    ``$HERMES_HOME/profiles`` normally, or the parent ``profiles`` directory
+    when HERMES_HOME is an isolated profile home.
 
     Each entry contains only the profile ``name`` and absolute ``path`` — no
     file contents (SOUL.md / config.yaml) are read or returned by this
     listing endpoint.
 
     Errors are returned as a structured JSON body (never a 500 stack trace):
-      - ``profiles_dir_missing`` (404) when ``$HERMES_HOME/profiles/`` does
-        not exist.
+      - ``profiles_dir_missing`` (404) when the resolved collection does not
+        exist.
       - ``profiles_dir_not_a_directory`` (400) when the path exists but is not
         a directory.
       - ``profiles_dir_unreadable`` (403) when the directory cannot be read
         (e.g. permission denied).
     """
-    profiles_dir = _hermes_home() / "profiles"
+    profiles_dir = _profiles_dir()
 
     if not profiles_dir.exists():
         return _err(
@@ -578,7 +597,7 @@ def profile_status(profile: str):
             },
         )
 
-    profile_dir = _hermes_home() / "profiles" / profile
+    profile_dir = _profile_dir(profile)
     if not profile_dir.is_dir():
         return JSONResponse(
             status_code=404,
@@ -649,7 +668,7 @@ def profile_status(profile: str):
 
 
 def _resolve_profile_dir(profile: str) -> Path | None:
-    """Resolve a profile name to its directory under ``$HERMES_HOME/profiles``.
+    """Resolve a profile name within the explicit profile collection.
 
     Returns the directory ``Path`` when it exists, or ``None`` when the profile
     name is invalid or the directory is absent. The name is validated to be a
@@ -657,7 +676,7 @@ def _resolve_profile_dir(profile: str) -> Path | None:
     """
     if not profile or "/" in profile or "\\" in profile or profile in (".", ".."):
         return None
-    candidate = _hermes_home() / "profiles" / profile
+    candidate = _profile_dir(profile)
     return candidate if candidate.is_dir() else None
 
 
