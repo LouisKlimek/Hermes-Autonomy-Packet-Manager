@@ -40,7 +40,7 @@ import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 # The HAPM engine lives in the ``hapm`` package next to this module. Make
 # it importable whether the dashboard adds ``dashboard/`` to sys.path or not.
@@ -71,6 +71,12 @@ from hapm.builder_pr import BuilderPRError, open_addon_pr  # noqa: E402
 from hapm.builder_sanitize import (  # noqa: E402
     SanitizeError,
     check_addon,
+)
+
+from hapm.custom_addons import (  # noqa: E402
+    CustomAddonError,
+    CustomAddonStore,
+    addon_zip_bytes,
 )
 
 # The dashboard mounts this router at /api/plugins/hapm/ at process start.
@@ -123,6 +129,19 @@ def _addons_root() -> Path:
     if val:
         return Path(val)
     return _HERE.parent / "addons"
+
+
+def _custom_store() -> CustomAddonStore:
+    """Custom packages live only in the user-owned HAPM boundary."""
+    return CustomAddonStore(hermes_home=_hermes_home())
+
+
+def _addon_directory(addon_id: str) -> Path:
+    """Resolve a custom package before falling back to immutable shipped addons."""
+    try:
+        return _custom_store().load(addon_id).addon.directory
+    except CustomAddonError:
+        return _addons_root() / addon_id
 
 
 def _profile_dir(profile: str) -> Path:
@@ -234,6 +253,7 @@ def _addon_summary(addon, active_ids: set[str]) -> dict:
         ],
         "compatible_profiles_or_presets": addon.compatible,
         "enabled": addon.id in active_ids,
+        "custom": addon.directory.parent == _custom_store().root,
     }
 
 
@@ -284,6 +304,11 @@ def list_addons(target: str = "", profile: str = ""):
 
     try:
         addons = compatible_addons(addons_root, target)
+        addons.extend(
+            custom.addon
+            for custom in _custom_store().list()
+            if custom.addon.is_compatible_with(target)
+        )
     except RegistryError as exc:
         return _err(400, "registry_error", str(exc), addons_root=str(addons_root))
 
@@ -344,7 +369,7 @@ def enable_addon_route(payload: dict = Body(...)):
             profile=profile,
         )
 
-    addon_dir = _addons_root() / addon_id
+    addon_dir = _addon_directory(addon_id)
     if not (addon_dir / "manifest.json").is_file():
         return _err(
             404,
@@ -440,7 +465,7 @@ def resolve_addon_route(payload: dict = Body(...)):
         )
 
     addons_root = _addons_root()
-    addon_dir = addons_root / addon_id
+    addon_dir = _addon_directory(addon_id)
     if not (addon_dir / "manifest.json").is_file():
         return _err(
             404,
@@ -816,6 +841,56 @@ def revert_preset(payload: dict = Body(...)):
         )
 
     return {"status": "reverted", **result}
+
+
+# ---------------------------------------------------------------------------
+# Custom addons: private storage, safe edit, and package-only export.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/custom-addons")
+def create_custom_addon(payload: dict = Body(...)):
+    try:
+        addon = _custom_store().create(payload)
+    except CustomAddonError as exc:
+        return _err(422, "custom_addon_invalid", str(exc))
+    return {"status": "created", "addon": _addon_summary(addon.addon, set())}
+
+
+@router.get("/custom-addons/{addon_id}")
+def get_custom_addon(addon_id: str):
+    try:
+        addon = _custom_store().load(addon_id)
+    except CustomAddonError as exc:
+        return _err(404, "custom_addon_not_found", str(exc), addon=addon_id)
+    return {
+        "addon": _addon_summary(addon.addon, set()),
+        "soul_block": (addon.addon.directory / "soul_block.md").read_text(encoding="utf-8"),
+    }
+
+
+@router.put("/custom-addons/{addon_id}")
+def update_custom_addon(addon_id: str, payload: dict = Body(...)):
+    try:
+        addon = _custom_store().update(addon_id, payload)
+    except CustomAddonError as exc:
+        return _err(422, "custom_addon_invalid", str(exc), addon=addon_id)
+    return {"status": "updated", "addon": _addon_summary(addon.addon, set())}
+
+
+@router.get("/custom-addons/{addon_id}/download")
+def download_custom_addon(addon_id: str):
+    try:
+        addon = _custom_store().load(addon_id)
+        content = addon_zip_bytes(addon)
+    except CustomAddonError as exc:
+        return _err(404, "custom_addon_download_failed", str(exc), addon=addon_id)
+    filename = f"{addon.id}.zip"
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ---------------------------------------------------------------------------
