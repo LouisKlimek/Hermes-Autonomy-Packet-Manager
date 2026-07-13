@@ -85,6 +85,16 @@ def test_no_lock_empty_state(tmp_path: Path):
     assert body["addons"] == []
 
 
+def test_isolated_profile_home_resolves_status_from_parent_collection(tmp_path: Path):
+    isolated_home = _make_profile(tmp_path, "ceo-orchestrator")
+    work = _make_profile(tmp_path, "work")
+
+    status, body = _call_status(isolated_home, "work")
+
+    assert status == 200
+    assert body["profile_dir"] == str(work)
+
+
 def test_preset_and_addons(tmp_path: Path):
     prof = _make_profile(tmp_path, "work")
     _write_lock(
@@ -174,6 +184,7 @@ def _run_standalone() -> int:
 
     tests = [
         test_no_lock_empty_state,
+        test_isolated_profile_home_resolves_status_from_parent_collection,
         test_preset_and_addons,
         test_no_stale_reads_documented_verification,
         test_unknown_profile,

@@ -7,6 +7,7 @@ the same dependency the dashboard already provides to the plugin.
 Covered scenarios (from the task acceptance criteria):
   - empty profiles dir      -> 200, empty list
   - multiple profiles       -> 200, sorted list with name + path, no contents
+  - isolated profile home   -> 200, its parent profiles collection is listed
   - missing profiles dir    -> 404 structured error
   - profiles path is a file -> 400 structured error
   - unreadable profiles dir -> 403 structured error (skipped when running as
@@ -75,6 +76,22 @@ def test_multiple_profiles(tmp_path: Path):
         assert "secret" not in json.dumps(entry)
 
 
+def test_isolated_profile_home_uses_parent_profiles_collection(tmp_path: Path):
+    profiles = tmp_path / "profiles"
+    isolated_home = profiles / "ceo-orchestrator"
+    isolated_home.mkdir(parents=True)
+    (profiles / "fullstack-developer").mkdir()
+
+    status, body = _call_profiles(isolated_home)
+
+    assert status == 200
+    assert body["profiles_dir"] == str(profiles)
+    assert [entry["name"] for entry in body["profiles"]] == [
+        "ceo-orchestrator",
+        "fullstack-developer",
+    ]
+
+
 def test_missing_profiles_dir(tmp_path: Path):
     # tmp_path has no "profiles" subdir.
     status, body = _call_profiles(tmp_path)
@@ -113,6 +130,7 @@ def _run_standalone() -> int:
     tests = [
         test_empty_profiles_dir,
         test_multiple_profiles,
+        test_isolated_profile_home_uses_parent_profiles_collection,
         test_missing_profiles_dir,
         test_profiles_path_is_file,
         test_unreadable_profiles_dir,
