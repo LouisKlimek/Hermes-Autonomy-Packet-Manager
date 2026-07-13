@@ -132,7 +132,10 @@
     presetDetailInactive: "This preset is available to apply to the selected profile.",
     addonDetailActive: "This addon is active for the selected profile.",
     addonDetailAvailable: "This addon is available for the selected profile.",
-    addonDetailDisabled: "This addon is currently disabled; enabling it requires a selected compatible preset or profile.",
+    addonDetailNoPresetAvailable:
+      "No active preset is selected. This compatible addon remains available through its profile controls.",
+    addonDetailControlsBusy:
+      "Its enable controls are temporarily unavailable while another change is in progress.",
     addonDetailCompatibility: "Compatible with: ",
     addonDetailNoCompatibility: "No compatibility information is available from this registry entry.",
     dialogTitle: "Apply preset?",
@@ -455,6 +458,7 @@
   function DetailDialog(props) {
     var titleId = "hapm-detail-title";
     var closeRef = React.useRef(null);
+    var dialogRef = React.useRef(null);
     var triggerRef = React.useRef(null);
     var item = props.item || {};
     var effects = props.effects || [];
@@ -469,10 +473,37 @@
       };
     }, []);
 
+    function focusableElements() {
+      if (!dialogRef.current) return [];
+      return Array.prototype.slice.call(
+        dialogRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+    }
+
     function onKeyDown(e) {
       if (e.key === "Escape" || e.key === "Esc") {
         e.preventDefault();
         props.onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var focusable = focusableElements();
+      if (!focusable.length) {
+        e.preventDefault();
+        if (dialogRef.current) dialogRef.current.focus();
+        return;
+      }
+      var active = typeof document !== "undefined" ? document.activeElement : null;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (e.shiftKey && (!dialogRef.current.contains(active) || active === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (!dialogRef.current.contains(active) || active === last)) {
+        e.preventDefault();
+        first.focus();
       }
     }
 
@@ -495,14 +526,16 @@
         role: "presentation",
         style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000, padding: 16 },
         onClick: function (e) { if (e.target === e.currentTarget) props.onClose(); },
-        onKeyDown: onKeyDown,
       },
       h(
         "div",
         {
           role: "dialog",
+          ref: dialogRef,
+          tabIndex: -1,
           "aria-modal": "true",
           "aria-labelledby": titleId,
+          onKeyDown: onKeyDown,
           style: { background: C.panel, color: C.text, border: "1px solid " + C.border, borderRadius: 12, maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto", padding: "20px 22px", boxShadow: "0 20px 60px rgba(0,0,0,0.45)" },
         },
         h(
@@ -1540,7 +1573,8 @@
         ? COPY.addonDetailActive
         : props.activePreset
         ? COPY.addonDetailAvailable + " Active preset: " + props.activePreset + "."
-        : COPY.addonDetailDisabled;
+        : COPY.addonDetailAvailable + " " + COPY.addonDetailNoPresetAvailable;
+      if (props.busy) state += " " + COPY.addonDetailControlsBusy;
       return state + " " + source;
     }
 
@@ -1922,6 +1956,41 @@
     var activePreset =
       status && status.active_preset ? status.active_preset : null;
     var addons = (status && status.addons) || [];
+    var detailState = useState(null);
+    var detail = detailState[0];
+    var setDetail = detailState[1];
+
+    function presetDetails() {
+      var preset = (props.presets || []).filter(function (p) {
+        return p && p.slug === activePreset;
+      })[0] || { id: activePreset, name: activePreset };
+      setDetail({
+        item: preset,
+        effects: [COPY.presetDetailEffect],
+        availability: COPY.presetDetailActive,
+      });
+    }
+
+    function addonDetails(statusAddon) {
+      var addon = (props.addons || []).filter(function (candidate) {
+        return candidate && candidate.id === statusAddon.addon_id;
+      })[0] || { id: statusAddon.addon_id, name: statusAddon.addon_id };
+      var effects = [];
+      var contributes = addon.contributes || {};
+      if (contributes.soul_block) effects.push("Adds a reversible SOUL.md behavior block.");
+      if (contributes.skills) effects.push("Adds reversible skills to the selected profile.");
+      (addon.modes || []).forEach(function (mode) {
+        if (mode && mode.description) effects.push((mode.name || mode.id) + ": " + mode.description);
+      });
+      var compatibility = addon.compatible_profiles_or_presets;
+      var availability = COPY.addonDetailActive +
+        (statusAddon.mode ? " " + COPY.statusModePrefix + statusAddon.mode + "." : "") +
+        " " +
+        (compatibility && compatibility.length
+          ? COPY.addonDetailCompatibility + compatibility.join(", ") + "."
+          : COPY.addonDetailNoCompatibility);
+      setDetail({ item: addon, effects: effects, availability: availability });
+    }
 
     return h(
       "div",
@@ -1950,15 +2019,25 @@
         ),
         h(
           "div",
-          {
-            style: {
-              fontSize: 14,
-              fontWeight: 600,
-              marginTop: 2,
-              opacity: activePreset ? 1 : 0.6,
+          { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 2 } },
+          h(
+            "div",
+            {
+              style: {
+                fontSize: 14,
+                fontWeight: 600,
+                opacity: activePreset ? 1 : 0.6,
+              },
             },
-          },
-          activePreset || COPY.statusNoPreset
+            activePreset || COPY.statusNoPreset
+          ),
+          activePreset
+            ? h(
+                Button,
+                { key: "status-preset-details", kind: "secondary", onClick: presetDetails },
+                COPY.details
+              )
+            : null
         )
       ),
       // Active addons list.
@@ -1991,21 +2070,41 @@
                   "div",
                   {
                     key: (a.addon_id || "addon") + "_" + i,
-                    style: {
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      padding: "5px 11px",
-                      borderRadius: 999,
-                      background: "rgba(110,168,254,0.16)",
-                      border: "1px solid " + C.okBorder,
-                    },
+                    style: { display: "flex", alignItems: "center", gap: 6 },
                   },
-                  (a.addon_id || "—") +
-                    (mode ? "  ·  " + COPY.statusModePrefix + mode : "")
+                  h(
+                    "div",
+                    {
+                      style: {
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        padding: "5px 11px",
+                        borderRadius: 999,
+                        background: "rgba(110,168,254,0.16)",
+                        border: "1px solid " + C.okBorder,
+                      },
+                    },
+                    (a.addon_id || "—") +
+                      (mode ? "  ·  " + COPY.statusModePrefix + mode : "")
+                  ),
+                  h(
+                    Button,
+                    { key: "status-addon-details", kind: "secondary", onClick: function () { addonDetails(a); } },
+                    COPY.details
+                  )
                 );
               })
             )
-      )
+      ),
+      detail
+        ? h(DetailDialog, {
+            key: "status-details-dialog",
+            item: detail.item,
+            effects: detail.effects,
+            availability: detail.availability,
+            onClose: function () { setDetail(null); },
+          })
+        : null
     );
   }
 
@@ -2526,7 +2625,12 @@
                     if (selected) loadAddons(selected);
                   },
                 }),
-                h(StatusView, { profile: selected, status: selectedStatus })
+                h(StatusView, {
+                  profile: selected,
+                  status: selectedStatus,
+                  presets: presets,
+                  addons: addons,
+                })
               )
             : h(
                 "div",
