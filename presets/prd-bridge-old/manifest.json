@@ -1,0 +1,15 @@
+{
+  "slug": "prd-bridge-old",
+  "name": "PRD Bridge (Validated Opportunity)",
+  "description": "Prepares PRD drafts only from validated opportunities.",
+  "version": "2.0.0",
+  "compatibleAddons": [
+    "prd-evidence-gates",
+    "workflow-context-governance"
+  ],
+  "markers": [
+    "prd",
+    "evidence",
+    "governance"
+  ]
+}

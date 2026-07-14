@@ -1,0 +1,14 @@
+{
+  "id": "designer-specification-governance",
+  "name": "Designer Specification Governance",
+  "description": "Designer Specification Governance.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "designer"
+  ],
+  "conflicts_with": []
+}

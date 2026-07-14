@@ -1,0 +1,15 @@
+{
+  "slug": "opportunity-strategy-agent",
+  "name": "Opportunity Strategy Agent",
+  "description": "Turns raw inputs into evidence-aware product opportunity assessments.",
+  "version": "2.0.0",
+  "compatibleAddons": [
+    "opportunity-discovery-governance",
+    "workflow-context-governance"
+  ],
+  "markers": [
+    "strategy",
+    "research",
+    "opportunity"
+  ]
+}

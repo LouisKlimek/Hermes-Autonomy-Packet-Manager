@@ -1,0 +1,15 @@
+{
+  "slug": "prd-bridge",
+  "name": "PRD Bridge",
+  "description": "Clarifies product requirements and prepares PRDs/PLDs for CEO approval.",
+  "version": "2.0.0",
+  "compatibleAddons": [
+    "prd-authoring-governance",
+    "yagni"
+  ],
+  "markers": [
+    "prd",
+    "product",
+    "requirements"
+  ]
+}

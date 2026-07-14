@@ -1,14 +1,13 @@
 {
   "slug": "ceo-orchestrator",
-  "name": "CEO (Orchestrator)",
-  "description": "Decomposes high-level goals into tasks and routes them to specialist profiles; orchestrates rather than implements.",
-  "version": "1.0.0",
+  "name": "CEO Orchestrator",
+  "description": "Routes specialist work and makes documented orchestration and risk decisions.",
+  "version": "2.0.0",
   "compatibleAddons": [
-    "*"
+    "ceo-pipeline-governance"
   ],
   "markers": [
     "orchestration",
-    "planning",
     "delegation"
   ]
 }

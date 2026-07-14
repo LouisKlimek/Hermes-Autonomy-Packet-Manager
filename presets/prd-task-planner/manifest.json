@@ -1,0 +1,16 @@
+{
+  "slug": "prd-task-planner",
+  "name": "PRD Task Planner",
+  "description": "Converts approved PRDs into small, dependency-aware specialist tasks.",
+  "version": "2.0.0",
+  "compatibleAddons": [
+    "prd-task-planning-governance",
+    "postmerge-no-qa-deploy",
+    "yagni"
+  ],
+  "markers": [
+    "planning",
+    "kanban",
+    "prd"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "postmerge-no-qa-deploy",
+  "name": "No Automatic QA or Deploy",
+  "description": "Post-Merge Boundaries.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "designer",
+    "github-manager",
+    "pr-reviewer",
+    "prd-task-planner"
+  ],
+  "conflicts_with": []
+}

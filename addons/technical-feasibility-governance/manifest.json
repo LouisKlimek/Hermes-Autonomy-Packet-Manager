@@ -1,0 +1,14 @@
+{
+  "id": "technical-feasibility-governance",
+  "name": "Technical Feasibility Governance",
+  "description": "Technical Feasibility Governance.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "technical-feasibility-reviewer"
+  ],
+  "conflicts_with": []
+}

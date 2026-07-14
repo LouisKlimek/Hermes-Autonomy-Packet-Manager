@@ -1,0 +1,14 @@
+{
+  "id": "ceo-pipeline-governance",
+  "name": "CEO Pipeline Governance",
+  "description": "CEO Pipeline Governance.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "ceo-orchestrator"
+  ],
+  "conflicts_with": []
+}

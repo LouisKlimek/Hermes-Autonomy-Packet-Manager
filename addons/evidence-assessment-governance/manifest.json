@@ -1,0 +1,14 @@
+{
+  "id": "evidence-assessment-governance",
+  "name": "Evidence Assessment Governance",
+  "description": "Evidence Assessment Governance.",
+  "version": "1.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "evidence-quality-analyst"
+  ],
+  "conflicts_with": []
+}
