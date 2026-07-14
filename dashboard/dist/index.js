@@ -125,6 +125,12 @@
     detailsPurpose: "Purpose",
     detailsEffects: "Effects and capabilities",
     detailsCompatibility: "Availability and compatibility",
+    detailsAppliedContents: "Exact contents applied",
+    detailsSoul: "SOUL.md",
+    detailsSkills: "Skills copied",
+    detailsNoSkills: "This preset does not include skill files.",
+    detailsConfig: "config.fragment.yaml",
+    detailsContentsUnavailable: "The exact preset files could not be read from the registry.",
     detailsDescriptionFallback: "No description is available from this registry entry.",
     detailsNoEffects: "This registry entry does not declare user-visible effects.",
     presetDetailEffect:
@@ -521,6 +527,22 @@
       );
     }
 
+    function codeBlock(content) {
+      return h("pre", { style: { margin: "4px 0 0", padding: 10, borderRadius: 8, background: C.bg, border: "1px solid " + C.border, whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 12, lineHeight: 1.45 } }, content);
+    }
+
+    function applicationContents(application) {
+      if (!application) return section(COPY.detailsAppliedContents, COPY.detailsContentsUnavailable);
+      return h(
+        "div",
+        { style: { marginTop: 14 } },
+        h("div", { style: { fontSize: 12, fontWeight: 700, opacity: 0.65 } }, COPY.detailsAppliedContents),
+        section(COPY.detailsSoul, codeBlock(application.soul_markdown || "")),
+        section(COPY.detailsSkills, application.skills && application.skills.length ? h("ul", { style: { margin: "4px 0 0", paddingLeft: 20 } }, application.skills.map(function (skill) { return h("li", { key: skill, style: { marginBottom: 4 } }, skill); })) : COPY.detailsNoSkills),
+        section(COPY.detailsConfig, codeBlock(application.config_fragment || ""))
+      );
+    }
+
     return h(
       "div",
       {
@@ -553,6 +575,7 @@
             : COPY.detailsNoEffects
         ),
         section(COPY.detailsCompatibility, props.availability || COPY.addonDetailNoCompatibility),
+        props.application !== undefined ? applicationContents(props.application) : null,
         h(
           "div",
           { className: "hapm-detail-footer", style: { display: "flex", justifyContent: "flex-end", marginTop: 20 } },
@@ -1502,6 +1525,7 @@
           key: "preset-details",
           item: selDesc,
           effects: [COPY.presetDetailEffect],
+          application: selDesc.application,
           availability:
             selDesc.slug === activePreset
               ? COPY.presetDetailActive
