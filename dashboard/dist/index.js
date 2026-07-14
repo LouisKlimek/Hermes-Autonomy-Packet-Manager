@@ -1622,8 +1622,11 @@
           { style: { flex: 1, minWidth: 0 } },
           h(
             "div",
-            { style: { fontSize: 14, fontWeight: 600 } },
-            addon.name || addon.id
+            { style: { fontSize: 14, fontWeight: 600, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" } },
+            addon.name || addon.id,
+            addon.custom
+              ? h("span", { style: { fontSize: 11, padding: "2px 6px", borderRadius: 999, background: C.okBg, border: "1px solid " + C.okBorder }, "aria-label": "Custom addon" }, "Custom")
+              : null
           ),
           addon.description
             ? h(
@@ -1775,7 +1778,7 @@
       );
     }
 
-    if (detailsOpen) {
+if (detailsOpen) {
       children.push(
         h(DetailDialog, {
           key: "addon-details",
@@ -1784,6 +1787,16 @@
           availability: addonAvailability(),
           onClose: function () { setDetailsOpen(false); },
         })
+      );
+    }
+
+    if (addon.custom) {
+      children.push(
+        h(
+          "div",
+          { key: "custom-actions", style: { marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" } },
+          h(Button, { kind: "secondary", onClick: function () { window.location.assign(API + "/custom-addons/" + encodeURIComponent(addon.id) + "/download"); } }, "Download ZIP")
+        )
       );
     }
 
