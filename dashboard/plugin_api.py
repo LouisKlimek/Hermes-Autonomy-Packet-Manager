@@ -157,6 +157,31 @@ def _err(status: int, error: str, message: str, **extra) -> JSONResponse:
     return JSONResponse(status_code=status, content=body)
 
 
+def _preset_application_contents(preset_path: str) -> dict:
+    """Return the exact registry files a preset would copy into a profile.
+
+    This reads the immutable preset package, never the selected profile, so the
+    detail UI can preview the pending SOUL, skills list, and config fragment
+    without exposing profile-specific content.
+    """
+    preset_dir = Path(preset_path)
+    skills_dir = preset_dir / "skills"
+    skills = []
+    if skills_dir.is_dir():
+        skills = [
+            path.relative_to(skills_dir).as_posix()
+            for path in sorted(skills_dir.rglob("*"))
+            if path.is_file() and path.name != ".gitkeep"
+        ]
+    return {
+        "soul_markdown": (preset_dir / "SOUL.md").read_text(encoding="utf-8"),
+        "skills": skills,
+        "config_fragment": (preset_dir / "config.fragment.yaml").read_text(
+            encoding="utf-8"
+        ),
+    }
+
+
 @router.get("/health")
 def health() -> dict:
     """Liveness probe for the HAPM backend mount.
@@ -716,7 +741,16 @@ def list_presets():
     registry metadata (slug, name, description, version, path) so the UI can
     present a preset picker. No profile is touched by this listing.
     """
-    presets = [p.to_dict() for p in hapm_apply.list_presets()]
+    presets = []
+    for preset in hapm_apply.list_presets():
+        summary = preset.to_dict()
+        try:
+            summary["application"] = _preset_application_contents(preset.path)
+        except OSError:
+            # Preserve the existing best-effort registry listing when a package
+            # becomes unreadable between manifest discovery and serialization.
+            summary["application"] = None
+        presets.append(summary)
     return {
         "presets_dir": str(hapm_apply.default_presets_root()),
         "presets": presets,

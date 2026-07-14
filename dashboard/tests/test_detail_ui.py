@@ -55,6 +55,13 @@ class DetailUiContractTests(unittest.TestCase):
         self.assertIn('var contributes = addon.contributes || {};', self.source)
         self.assertIn('COPY.detailsNoEffects', self.source)
 
+    def test_preset_details_show_exact_registry_files_to_be_applied(self):
+        self.assertIn('detailsAppliedContents', self.source)
+        self.assertIn('application: selDesc.application', self.source)
+        self.assertIn('application.soul_markdown', self.source)
+        self.assertIn('application.skills', self.source)
+        self.assertIn('application.config_fragment', self.source)
+
     def test_detail_dialog_has_no_mutating_api_calls(self):
         start = self.source.index('function DetailDialog(props)')
         end = self.source.index('// ---------------------------------------------------------------------------\n  // Confirmation dialog', start)

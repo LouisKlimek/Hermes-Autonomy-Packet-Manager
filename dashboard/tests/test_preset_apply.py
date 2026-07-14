@@ -271,7 +271,12 @@ def test_route_apply_and_revert(tmp_path: Path):
     soul_before = (tmp_path / "profiles" / "work" / "SOUL.md").read_bytes()
 
     listing = api.list_presets()
-    assert any(p["slug"] == "fs" for p in listing["presets"])
+    details = next(p for p in listing["presets"] if p["slug"] == "fs")
+    assert details["application"] == {
+        "soul_markdown": "ROUTE SOUL\n",
+        "skills": ["role.md"],
+        "config_fragment": WHITELISTED_FRAGMENT,
+    }
 
     applied = api.apply_preset({"profile": "work", "preset": "fs"})
     assert applied["status"] == "applied"
