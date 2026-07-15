@@ -80,7 +80,11 @@
     if (document.getElementById("hapm-plugin-styles")) return;
     var css =
       "@keyframes hapm-spin{to{transform:rotate(360deg)}}" +
+      ".hapm-mobile-profile-select{display:none}" +
       "@media (max-width:560px){" +
+      ".hapm-desktop-profile-panel{display:none}" +
+      ".hapm-mobile-profile-select{display:block;margin:0 0 16px}" +
+      ".hapm-content-panel{min-width:0!important;flex-basis:100%!important}" +
       ".hapm-conflict-footer{flex-direction:column-reverse;align-items:stretch}" +
       ".hapm-conflict-footer>button,.hapm-detail-footer>button{width:100%}" +
       "}";
@@ -1095,6 +1099,9 @@
   // ---------------------------------------------------------------------------
   function ProfileList(props) {
     // props: profiles, statuses, selected, onSelect, loading, error, onRetry
+    var queryState = useState("");
+    var query = queryState[0];
+    var setQuery = queryState[1];
     if (props.loading) {
       return h(
         "div",
@@ -1144,10 +1151,32 @@
         )
       );
     }
+    var filteredProfiles = props.profiles.filter(function (p) {
+      return p.name.toLowerCase().indexOf(query.toLowerCase()) !== -1;
+    });
     return h(
       "div",
       { style: { padding: 4 } },
-      props.profiles.map(function (p) {
+      h("input", {
+        type: "search",
+        value: query,
+        onChange: function (e) {
+          setQuery(e.target.value);
+        },
+        placeholder: "Search profiles",
+        "aria-label": "Search profiles",
+        style: {
+          boxSizing: "border-box",
+          width: "100%",
+          margin: "0 0 8px",
+          padding: "8px 10px",
+          borderRadius: 7,
+          border: "1px solid " + C.border,
+          background: "transparent",
+          color: C.text,
+        },
+      }),
+      filteredProfiles.map(function (p) {
         var isSel = props.selected === p.name;
         var st = props.statuses[p.name];
         var hasPreset = !!(st && st.active_preset);
@@ -1214,6 +1243,51 @@
           )
         );
       })
+    );
+  }
+
+  function MobileProfileSelect(props) {
+    if (props.loading) {
+      return h("div", { style: { fontSize: 13, opacity: 0.65 } }, "Loading profiles …");
+    }
+    if (props.error) {
+      return h(
+        Banner,
+        {
+          variant: "warn",
+          title: COPY.profilesLoadError,
+          actions: [
+            h(Button, { key: "retry", kind: "secondary", onClick: props.onRetry }, COPY.retry),
+          ],
+        },
+        COPY.profilesLoadErrorSub
+      );
+    }
+    if (!props.profiles || !props.profiles.length) {
+      return h(Banner, { variant: "warn", title: COPY.profilesEmpty }, COPY.profilesEmptySub);
+    }
+    return h(
+      "div",
+      null,
+      h(
+        "label",
+        { htmlFor: "hapm-mobile-profile-select", style: { display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6 } },
+        COPY.profilesHeader
+      ),
+      h(
+        "select",
+        {
+          id: "hapm-mobile-profile-select",
+          value: props.selected || "",
+          onChange: function (e) {
+            props.onSelect(e.target.value);
+          },
+          style: { boxSizing: "border-box", width: "100%", padding: "10px", borderRadius: 8 },
+        },
+        props.profiles.map(function (p) {
+          return h("option", { key: p.name, value: p.name }, p.name);
+        })
+      )
     );
   }
 
@@ -2657,6 +2731,21 @@ if (detailsOpen) {
           )
         : null,
 
+      // Mobile-only native profile dropdown. The desktop list below remains the
+      // richer selector for larger layouts.
+      h(
+        "div",
+        { className: "hapm-mobile-profile-select" },
+        h(MobileProfileSelect, {
+          profiles: profiles,
+          selected: selected,
+          onSelect: setSelected,
+          loading: profilesLoading,
+          error: profilesErr,
+          onRetry: loadProfiles,
+        })
+      ),
+
       // Two-column layout (§2). flex-wrap gives the responsive collapse.
       h(
         "div",
@@ -2672,6 +2761,7 @@ if (detailsOpen) {
         h(
           "div",
           {
+            className: "hapm-desktop-profile-panel",
             style: {
               flex: "0 0 300px",
               minWidth: 240,
@@ -2711,6 +2801,7 @@ if (detailsOpen) {
         h(
           "div",
           {
+            className: "hapm-content-panel",
             style: {
               flex: "1 1 480px",
               minWidth: 300,
