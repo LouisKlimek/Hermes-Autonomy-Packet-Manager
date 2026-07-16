@@ -78,6 +78,13 @@ from hapm.custom_addons import (  # noqa: E402
     CustomAddonStore,
     addon_zip_bytes,
 )
+from hapm.repository_scope import (  # noqa: E402
+    ADDON_ID as REPOSITORY_SCOPE_ADDON_ID,
+    RepositoryScopeError,
+    load_repositories,
+    render_soul_block,
+    update_repositories,
+)
 
 # The dashboard mounts this router at /api/plugins/hapm/ at process start.
 router = APIRouter()
@@ -408,7 +415,16 @@ def enable_addon_route(payload: dict = Body(...)):
 
     try:
         addon = load_addon(addon_dir)
-        result = enable_addon(pdir, addon, target=target, mode_id=mode_id)
+        scope_content = (
+            render_soul_block(load_repositories(_hermes_home()))
+            if addon_id == REPOSITORY_SCOPE_ADDON_ID
+            else None
+        )
+        result = enable_addon(
+            pdir, addon, target=target, mode_id=mode_id, soul_block_content=scope_content
+        )
+    except RepositoryScopeError as exc:
+        return _err(400, "repository_scope_invalid", str(exc), addon=addon_id)
     except AddonNotCompatibleError as exc:
         return _err(409, "not_compatible", str(exc), addon=addon_id, target=target)
     except AddonConflictError as exc:
@@ -576,6 +592,26 @@ def disable_addon_route(payload: dict = Body(...)):
         "enabled": result.enabled,
         "lock_path": result.lock_path,
     }
+
+
+@router.get("/repository-scope")
+def get_repository_scope():
+    """Return the single shared allowlist used by Repository Scope."""
+    try:
+        return {"repositories": load_repositories(_hermes_home())}
+    except RepositoryScopeError as exc:
+        return _err(500, "repository_scope_unavailable", str(exc))
+
+
+@router.put("/repository-scope")
+def update_repository_scope(payload: dict = Body(...)):
+    """Update the shared allowlist and refresh every active scope addon."""
+    try:
+        return update_repositories(
+            _hermes_home(), _profiles_dir(), payload.get("repositories")
+        )
+    except RepositoryScopeError as exc:
+        return _err(400, "repository_scope_invalid", str(exc))
 
 
 # ---------------------------------------------------------------------------

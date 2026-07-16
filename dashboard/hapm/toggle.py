@@ -289,6 +289,7 @@ def enable_addon(
     target: str,
     mode_id: str | None = None,
     on_conflict: str = "report",
+    soul_block_content: str | None = None,
 ) -> "ToggleResult | ConflictResult":
     """Enable ``addon`` on the profile at ``profile_dir``.
 
@@ -380,7 +381,11 @@ def enable_addon(
         # Back up SOUL.md before mutating so disable can restore byte-exactly
         # even in edge cases; the marked-block remove is the primary undo path.
         backup_id = store.create([SOUL_FILENAME])
-        content = addon.soul_block_path(mode_id).read_text(encoding="utf-8")
+        content = (
+            soul_block_content
+            if soul_block_content is not None
+            else addon.soul_block_path(mode_id).read_text(encoding="utf-8")
+        )
         new_soul = upsert_addon_block(soul_text, addon.id, content)
         _write_soul(profile, new_soul)
 
