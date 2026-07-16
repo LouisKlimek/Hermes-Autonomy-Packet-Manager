@@ -382,6 +382,25 @@
     return body;
   }
 
+  async function apiPut(path, payload) {
+    var res;
+    try {
+      res = await fetch(API + path, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      var ne = new Error("network");
+      ne.__network = true;
+      throw ne;
+    }
+    var body = null;
+    try { body = await res.json(); } catch (e) { body = null; }
+    if (!res.ok) throw tagError(res, body);
+    return body;
+  }
+
   // ---------------------------------------------------------------------------
   // Presentational primitives.
   // ---------------------------------------------------------------------------
@@ -1728,6 +1747,66 @@
     );
   }
 
+  function RepositoryScopeEditor() {
+    var repositoriesState = useState(null);
+    var repositories = repositoriesState[0];
+    var setRepositories = repositoriesState[1];
+    var textState = useState("");
+    var text = textState[0];
+    var setText = textState[1];
+    var errorState = useState(null);
+    var error = errorState[0];
+    var setError = errorState[1];
+    var busyState = useState(false);
+    var busy = busyState[0];
+    var setBusy = busyState[1];
+
+    useEffect(function () {
+      var cancelled = false;
+      apiGet("/repository-scope").then(function (result) {
+        if (cancelled) return;
+        var items = result.repositories || [];
+        setRepositories(items);
+        setText(items.join("\n"));
+      }).catch(function (err) {
+        if (!cancelled) setError((err.body && err.body.message) || "Could not load the shared repository scope.");
+      });
+      return function () { cancelled = true; };
+    }, []);
+
+    async function save() {
+      var items = text.split("\n").map(function (item) { return item.trim(); }).filter(Boolean);
+      setBusy(true);
+      setError(null);
+      try {
+        var result = await apiPut("/repository-scope", { repositories: items });
+        setRepositories(result.repositories || items);
+        setText((result.repositories || items).join("\n"));
+      } catch (err) {
+        setError((err.body && err.body.message) || "Could not update the shared repository scope.");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    return h(
+      "div",
+      { style: { marginTop: 12, paddingTop: 12, borderTop: "1px solid " + C.border } },
+      h("div", { style: { fontSize: 12.5, fontWeight: 600 } }, "Allowed repositories (shared)"),
+      h("div", { style: { fontSize: 12, opacity: 0.7, marginTop: 3, lineHeight: 1.45 } }, "One GitHub owner/repository per line. Saving updates every profile where Repository Scope is active."),
+      h("textarea", {
+        value: text,
+        disabled: busy || repositories === null,
+        onChange: function (e) { setText(e.target.value); },
+        "aria-label": "Allowed repositories",
+        rows: Math.max(3, (repositories || []).length + 1),
+        style: { boxSizing: "border-box", width: "100%", marginTop: 8, padding: 8, borderRadius: 7, border: "1px solid " + C.border, background: C.bg, color: C.text, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, resize: "vertical" },
+      }),
+      error ? h("div", { role: "alert", style: { color: C.danger, fontSize: 12, marginTop: 6 } }, error) : null,
+      h(Button, { kind: "secondary", disabled: busy || repositories === null, onClick: save, style: { marginTop: 8 } }, busy ? "Saving…" : "Update allowed repositories")
+    );
+  }
+
   function AddonRow(props) {
     // props: addon, profile, target, busy, activeMode, onEnable(addon, modeId),
     //        onDisable(addon)
@@ -1973,6 +2052,10 @@ if (detailsOpen) {
           onClose: function () { setDetailsOpen(false); },
         })
       );
+    }
+
+    if (addon.id === "repository-scope" && enabled) {
+      children.push(h(RepositoryScopeEditor, { key: "repository-scope-editor" }));
     }
 
     if (addon.custom) {
