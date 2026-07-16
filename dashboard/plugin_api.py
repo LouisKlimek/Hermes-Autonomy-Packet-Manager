@@ -703,8 +703,11 @@ def get_repository_scope():
 
 
 @router.put("/repository-scope")
-def update_repository_scope(payload: dict = Body(...)):
-    """Update the shared allowlist and refresh every active scope addon."""
+def update_repository_scope(request: Request, payload: dict = Body(...)):
+    """Update Repository Scope only for a server-authenticated policy admin."""
+    authorization = _require_policy_admin(request)
+    if isinstance(authorization, JSONResponse):
+        return authorization
     try:
         return update_repositories(
             _hermes_home(), _profiles_dir(), payload.get("repositories")
