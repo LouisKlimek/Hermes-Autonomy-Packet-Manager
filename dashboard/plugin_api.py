@@ -39,7 +39,7 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse, Response
 
 # The HAPM engine lives in the ``hapm`` package next to this module. Make
@@ -77,6 +77,14 @@ from hapm.custom_addons import (  # noqa: E402
     CustomAddonError,
     CustomAddonStore,
     addon_zip_bytes,
+)
+from hapm.repo_policy import (  # noqa: E402
+    RepositoryPolicyError,
+    add_repository,
+    default_policy_path,
+    list_repositories,
+    remove_repository,
+    replace_repositories,
 )
 from hapm.repository_scope import (  # noqa: E402
     ADDON_ID as REPOSITORY_SCOPE_ADDON_ID,
@@ -138,6 +146,12 @@ def _addons_root() -> Path:
     return _HERE.parent / "addons"
 
 
+def _repository_policy_path() -> Path:
+    """Canonical, server-owned repository policy location (default deny)."""
+    override = os.environ.get("HAPM_REPOSITORY_POLICY", "").strip()
+    return Path(override) if override else default_policy_path(_hermes_home())
+
+
 def _custom_store() -> CustomAddonStore:
     """Custom packages live only in the user-owned HAPM boundary."""
     return CustomAddonStore(hermes_home=_hermes_home())
@@ -162,6 +176,91 @@ def _err(status: int, error: str, message: str, **extra) -> JSONResponse:
     body = {"error": error, "message": message}
     body.update(extra)
     return JSONResponse(status_code=status, content=body)
+
+
+def _identity_name(identity: object) -> str:
+    """Extract a principal only from dashboard-authenticated request state."""
+    if isinstance(identity, str):
+        return identity
+    for attribute in ("username", "name", "id"):
+        value = getattr(identity, attribute, None)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _authenticated_actor(request: Request) -> str:
+    """Return the server-authenticated dashboard principal, never a header."""
+    for key in ("authenticated_user", "user"):
+        actor = _identity_name(getattr(request.state, key, None))
+        if actor:
+            return actor
+    actor = _identity_name(request.scope.get("authenticated_user"))
+    return actor
+
+
+def _require_policy_admin(request: Request) -> str | JSONResponse:
+    """Fail closed unless dashboard auth identifies the configured policy admin."""
+    actor = _authenticated_actor(request)
+    configured = os.environ.get("HAPM_POLICY_ADMINS", "ceo-orchestrator")
+    admins = {item.strip() for item in configured.split(",") if item.strip()}
+    if not actor or actor not in admins:
+        return _err(403, "policy_admin_required", "a server-authenticated policy administrator is required")
+    return actor
+
+
+# ---------------------------------------------------------------------------
+# Canonical GitHub repository policy (human dashboard administration)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/repository-policy")
+def repository_policy_route():
+    """List the default-deny canonical repository policy (never credentials)."""
+    path = _repository_policy_path()
+    try:
+        return {"path": str(path), "repositories": list_repositories(path)}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
+
+
+@router.post("/repository-policy")
+def replace_repository_policy_route(request: Request, payload: dict = Body(...)):
+    """Replace policy only for a server-authenticated policy administrator."""
+    authorization = _require_policy_admin(request)
+    if isinstance(authorization, JSONResponse):
+        return authorization
+    repositories = payload.get("repositories")
+    if not isinstance(repositories, list):
+        return _err(400, "bad_request", "'repositories' must be a list.")
+    try:
+        return {"repositories": replace_repositories(_repository_policy_path(), repositories)}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
+
+
+@router.post("/repository-policy/add")
+def add_repository_policy_route(request: Request, payload: dict = Body(...)):
+    authorization = _require_policy_admin(request)
+    if isinstance(authorization, JSONResponse):
+        return authorization
+    repository = payload.get("repository", "")
+    try:
+        return {"repositories": add_repository(_repository_policy_path(), str(repository))}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
+
+
+@router.post("/repository-policy/remove")
+def remove_repository_policy_route(request: Request, payload: dict = Body(...)):
+    authorization = _require_policy_admin(request)
+    if isinstance(authorization, JSONResponse):
+        return authorization
+    repository = payload.get("repository", "")
+    try:
+        return {"repositories": remove_repository(_repository_policy_path(), str(repository))}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
 
 
 def _preset_application_contents(preset_path: str) -> dict:
@@ -604,8 +703,11 @@ def get_repository_scope():
 
 
 @router.put("/repository-scope")
-def update_repository_scope(payload: dict = Body(...)):
-    """Update the shared allowlist and refresh every active scope addon."""
+def update_repository_scope(request: Request, payload: dict = Body(...)):
+    """Update Repository Scope only for a server-authenticated policy admin."""
+    authorization = _require_policy_admin(request)
+    if isinstance(authorization, JSONResponse):
+        return authorization
     try:
         return update_repositories(
             _hermes_home(), _profiles_dir(), payload.get("repositories")
@@ -1089,7 +1191,7 @@ def builder_get_draft(addon_id: str):
 
 
 @router.post("/builder/submit")
-def builder_submit(payload: dict = Body(...)):
+def builder_submit(request: Request, payload: dict = Body(...)):
     """Open the community-addon PR for a saved draft (spec §5 activation path).
 
     Loads the draft, runs the final non-overridable §4 sanitizing gate again,
@@ -1100,6 +1202,9 @@ def builder_submit(payload: dict = Body(...)):
 
     Body: ``{addon_id: str, base?: str}``.
     """
+    actor = _authenticated_actor(request)
+    if not actor:
+        return _err(403, "authenticated_user_required", "a server-authenticated profile is required")
     addon_id = str(payload.get("addon_id", "")).strip()
     if not addon_id:
         return _err(400, "bad_request", "'addon_id' is required.")
@@ -1122,7 +1227,13 @@ def builder_submit(payload: dict = Body(...)):
         )
 
     try:
-        result = open_addon_pr(draft, _repo_root(), base=base)
+        result = open_addon_pr(
+            draft,
+            _repo_root(),
+            profile_dir=_profile_dir(actor),
+            policy_path=_repository_policy_path(),
+            base=base,
+        )
     except SanitizeError as exc:
         return _err(422, "sanitizing_failed", str(exc), addon_id=addon_id)
     except BuilderPRError as exc:

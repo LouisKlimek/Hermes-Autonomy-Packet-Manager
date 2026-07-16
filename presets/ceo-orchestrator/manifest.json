@@ -2,12 +2,7 @@
   "slug": "ceo-orchestrator",
   "name": "CEO Orchestrator",
   "description": "Routes specialist work and makes documented orchestration and risk decisions.",
-  "version": "2.0.0",
-  "compatibleAddons": [
-    "ceo-pipeline-governance"
-  ],
-  "markers": [
-    "orchestration",
-    "delegation"
-  ]
+  "version": "2.1.0",
+  "compatibleAddons": ["github-agent", "ceo-pipeline-governance"],
+  "markers": ["orchestration", "delegation"]
 }

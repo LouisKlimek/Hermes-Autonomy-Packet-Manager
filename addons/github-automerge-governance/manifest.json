@@ -1,14 +1,10 @@
 {
   "id": "github-automerge-governance",
-  "name": "GitHub Auto-Merge Governance",
-  "description": "GitHub Auto-Merge Governance.",
-  "version": "1.0.0",
-  "contributes": {
-    "soul_block": true,
-    "skills": false
-  },
-  "compatible_profiles_or_presets": [
-    "github-manager"
-  ],
-  "conflicts_with": []
+  "name": "GitHub Auto-Merge Governance (deprecated)",
+  "description": "Deprecated; migrate to github-agent and the canonical repository policy.",
+  "version": "1.1.0",
+  "contributes": {"soul_block": true, "skills": false},
+  "compatible_profiles_or_presets": ["github-manager"],
+  "conflicts_with": [],
+  "deprecated_by": "github-agent"
 }

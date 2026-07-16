@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .builder_drafts import Draft
+from .repo_policy import RepositoryPolicyError, require_repository_allowed
 from .builder_sanitize import (
     SanitizeError,
     SanitizeResult,
@@ -335,6 +336,8 @@ def open_addon_pr(
     draft: Draft,
     repo_root: str | Path,
     *,
+    profile_dir: str | Path,
+    policy_path: str | Path,
     base: str = "main",
     push: bool = True,
 ) -> PRResult:
@@ -348,6 +351,14 @@ def open_addon_pr(
     root = Path(repo_root)
     branch = branch_for(draft.addon_id)
     _assert_not_protected(branch)
+    # The repository is resolved from the immutable configured origin and
+    # authorized before *any* git or GitHub side effect.  Missing profile state,
+    # missing policy, or a denied repository all fail closed.
+    slug = _repo_slug(root)
+    try:
+        require_repository_allowed(profile_dir, policy_path, slug)
+    except RepositoryPolicyError as exc:
+        raise BuilderPRError(str(exc)) from exc
     # NOTE: ``base`` (the PR target, typically ``main``) is deliberately NOT
     # passed through _assert_not_protected — we open a PR *against* it, we never
     # push to it. The push target below is always the addon branch.
