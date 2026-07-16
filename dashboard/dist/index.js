@@ -84,6 +84,8 @@
       "@media (max-width:560px){" +
       ".hapm-desktop-profile-panel{display:none}" +
       ".hapm-mobile-profile-select{display:block;margin:0 0 16px}" +
+      ".hapm-mobile-profile-select select{background:var(--hermes-panel, #232428)!important;color:var(--hermes-text, #e6e6e6)!important;border:1px solid var(--hermes-border, rgba(255,255,255,0.10))!important}" +
+      ".hapm-mobile-profile-select select option{background:var(--hermes-panel, #232428)!important;color:var(--hermes-text, #e6e6e6)!important}" +
       ".hapm-content-panel{min-width:0!important;flex-basis:100%!important}" +
       ".hapm-conflict-footer{flex-direction:column-reverse;align-items:stretch}" +
       ".hapm-conflict-footer>button,.hapm-detail-footer>button{width:100%}" +
@@ -1282,7 +1284,15 @@
           onChange: function (e) {
             props.onSelect(e.target.value);
           },
-          style: { boxSizing: "border-box", width: "100%", padding: "10px", borderRadius: 8 },
+          style: {
+            boxSizing: "border-box",
+            width: "100%",
+            padding: "10px",
+            borderRadius: 8,
+            background: C.panel,
+            color: C.text,
+            border: "1px solid " + C.border,
+          },
         },
         props.profiles.map(function (p) {
           return h("option", { key: p.name, value: p.name }, p.name);
