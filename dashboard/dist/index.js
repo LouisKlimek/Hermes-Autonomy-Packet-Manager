@@ -81,7 +81,7 @@
     var css =
       "@keyframes hapm-spin{to{transform:rotate(360deg)}}" +
       ".hapm-mobile-profile-select{display:none}" +
-      "@media (max-width:560px){" +
+      "@media (max-width:1200px){" +
       ".hapm-desktop-profile-panel{display:none}" +
       ".hapm-mobile-profile-select{display:block;margin:0 0 16px}" +
       ".hapm-mobile-profile-select select{background:var(--hermes-panel, #232428)!important;color:var(--hermes-text, #e6e6e6)!important;border:1px solid var(--hermes-border, rgba(255,255,255,0.10))!important}" +

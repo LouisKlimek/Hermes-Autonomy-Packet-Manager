@@ -11,7 +11,7 @@ assert.match(source, /function MobileProfileSelect\(props\)/);
 assert.match(source, /id: "hapm-mobile-profile-select"/);
 assert.match(source, /className: "hapm-mobile-profile-select"/);
 assert.match(source, /className: "hapm-desktop-profile-panel"/);
-assert.match(source, /@media \(max-width:560px\)\{/);
+assert.match(source, /@media \(max-width:1200px\)\{/);
 assert.match(source, /\.hapm-desktop-profile-panel\{display:none\}/);
 assert.match(source, /\.hapm-mobile-profile-select\{display:block/);
 assert.match(
