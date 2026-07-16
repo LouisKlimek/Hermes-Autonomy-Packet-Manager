@@ -2,14 +2,7 @@
   "slug": "pr-reviewer",
   "name": "PR Reviewer",
   "description": "Independently reviews pull requests and decides the next review-pipeline step.",
-  "version": "2.0.0",
-  "compatibleAddons": [
-    "pr-review-governance",
-    "postmerge-no-qa-deploy"
-  ],
-  "markers": [
-    "github",
-    "review",
-    "quality-gate"
-  ]
+  "version": "2.1.0",
+  "compatibleAddons": ["github-agent", "pr-review-governance", "postmerge-no-qa-deploy"],
+  "markers": ["github", "review", "quality-gate"]
 }

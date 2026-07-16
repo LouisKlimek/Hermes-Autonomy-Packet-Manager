@@ -51,6 +51,18 @@ from .registry import (
     load_addon,
     load_registry,
 )
+from .repo_policy import (
+    GITHUB_ADDON_ID,
+    RepositoryPolicyError,
+    add_repository,
+    canonical_repository,
+    default_policy_path,
+    is_repository_allowed,
+    list_repositories,
+    migrate_legacy_allowlists,
+    remove_repository,
+    replace_repositories,
+)
 from .toggle import (
     AddonAddonConflictError,
     AddonAlreadyEnabledError,
@@ -148,6 +160,17 @@ __all__ = [
     "compatible_addons",
     "load_addon",
     "load_registry",
+    # canonical GitHub repository policy
+    "GITHUB_ADDON_ID",
+    "RepositoryPolicyError",
+    "canonical_repository",
+    "default_policy_path",
+    "list_repositories",
+    "replace_repositories",
+    "add_repository",
+    "remove_repository",
+    "is_repository_allowed",
+    "migrate_legacy_allowlists",
     # toggle engine (FR-6)
     "AddonAlreadyEnabledError",
     "AddonConflictError",

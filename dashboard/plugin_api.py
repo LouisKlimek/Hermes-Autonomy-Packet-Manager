@@ -78,6 +78,14 @@ from hapm.custom_addons import (  # noqa: E402
     CustomAddonStore,
     addon_zip_bytes,
 )
+from hapm.repo_policy import (  # noqa: E402
+    RepositoryPolicyError,
+    add_repository,
+    default_policy_path,
+    list_repositories,
+    remove_repository,
+    replace_repositories,
+)
 
 # The dashboard mounts this router at /api/plugins/hapm/ at process start.
 router = APIRouter()
@@ -131,6 +139,12 @@ def _addons_root() -> Path:
     return _HERE.parent / "addons"
 
 
+def _repository_policy_path() -> Path:
+    """Canonical, server-owned repository policy location (default deny)."""
+    override = os.environ.get("HAPM_REPOSITORY_POLICY", "").strip()
+    return Path(override) if override else default_policy_path(_hermes_home())
+
+
 def _custom_store() -> CustomAddonStore:
     """Custom packages live only in the user-owned HAPM boundary."""
     return CustomAddonStore(hermes_home=_hermes_home())
@@ -155,6 +169,51 @@ def _err(status: int, error: str, message: str, **extra) -> JSONResponse:
     body = {"error": error, "message": message}
     body.update(extra)
     return JSONResponse(status_code=status, content=body)
+
+
+# ---------------------------------------------------------------------------
+# Canonical GitHub repository policy (human dashboard administration)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/repository-policy")
+def repository_policy_route():
+    """List the default-deny canonical repository policy (never credentials)."""
+    path = _repository_policy_path()
+    try:
+        return {"path": str(path), "repositories": list_repositories(path)}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
+
+
+@router.post("/repository-policy")
+def replace_repository_policy_route(payload: dict = Body(...)):
+    """Replace the policy through the authenticated dashboard API boundary."""
+    repositories = payload.get("repositories")
+    if not isinstance(repositories, list):
+        return _err(400, "bad_request", "'repositories' must be a list.")
+    try:
+        return {"repositories": replace_repositories(_repository_policy_path(), repositories)}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
+
+
+@router.post("/repository-policy/add")
+def add_repository_policy_route(payload: dict = Body(...)):
+    repository = payload.get("repository", "")
+    try:
+        return {"repositories": add_repository(_repository_policy_path(), str(repository))}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
+
+
+@router.post("/repository-policy/remove")
+def remove_repository_policy_route(payload: dict = Body(...)):
+    repository = payload.get("repository", "")
+    try:
+        return {"repositories": remove_repository(_repository_policy_path(), str(repository))}
+    except RepositoryPolicyError as exc:
+        return _err(400, "invalid_repository_policy", str(exc))
 
 
 def _preset_application_contents(preset_path: str) -> dict:
