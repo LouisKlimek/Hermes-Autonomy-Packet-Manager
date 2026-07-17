@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from fastapi.routing import APIRoute
 from starlette.requests import Request
 
 _DASHBOARD = Path(__file__).resolve().parent.parent
@@ -38,6 +39,48 @@ def _enable_scope(profile: Path) -> None:
         target="fullstack-developer",
         soul_block_content=render_soul_block(["Acme/Initial"]),
     )
+
+
+def test_get_repository_scope_returns_defaults_when_settings_are_missing(tmp_path: Path):
+    route = next(
+        route
+        for route in plugin_api.router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/repository-scope"
+        and "GET" in route.methods
+    )
+    assert route.endpoint is plugin_api.get_repository_scope
+
+    old_home = os.environ.get("HERMES_HOME")
+    os.environ["HERMES_HOME"] = str(tmp_path)
+    try:
+        status, body = _body(plugin_api.get_repository_scope())
+        assert status == 200
+        assert body["repositories"] == [
+            "LouisKlimek/Hermes-Tasklist-Plugin",
+            "LouisKlimek/Hermes-Autonomy-Packet-Manager",
+        ]
+    finally:
+        if old_home is None:
+            os.environ.pop("HERMES_HOME", None)
+        else:
+            os.environ["HERMES_HOME"] = old_home
+
+
+def test_get_repository_scope_returns_structured_settings_error(tmp_path: Path):
+    old_home = os.environ.get("HERMES_HOME")
+    os.environ["HERMES_HOME"] = str(tmp_path)
+    (tmp_path / "hapm_repository_scope.json").write_text("not json", encoding="utf-8")
+    try:
+        status, body = _body(plugin_api.get_repository_scope())
+        assert status == 500
+        assert body["error"] == "repository_scope_unavailable"
+        assert "Could not read repository scope settings" in body["message"]
+    finally:
+        if old_home is None:
+            os.environ.pop("HERMES_HOME", None)
+        else:
+            os.environ["HERMES_HOME"] = old_home
 
 
 def test_update_repository_scope_updates_every_active_profile(tmp_path: Path):

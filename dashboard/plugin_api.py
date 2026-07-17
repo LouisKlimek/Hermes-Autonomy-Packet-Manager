@@ -478,7 +478,7 @@ def _resolve_enable_inputs(payload: dict):
 
 
 @router.post("/addons/enable")
-def enable_addon_route(payload: dict = Body(...), request: Request | None = None):
+def enable_addon_route(payload: dict = Body(...), request: Request = None):
     """Enable an addon on a profile (FR-6b).
 
     Body (JSON):
