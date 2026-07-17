@@ -1767,7 +1767,7 @@
     return fallback;
   }
 
-  function RepositoryScopeEditor() {
+  function RepositoryScopeEditor(props) {
     var repositoriesState = useState(null);
     var repositories = repositoriesState[0];
     var setRepositories = repositoriesState[1];
@@ -1794,6 +1794,7 @@
     }, []);
 
     function updateRow(index, value) {
+      if (props.mutationsDisabled) return;
       setRepositories(repositories.map(function (repository, rowIndex) {
         return rowIndex === index ? value : repository;
       }));
@@ -1801,16 +1802,19 @@
     }
 
     function removeRow(index) {
+      if (props.mutationsDisabled) return;
       setRepositories(repositories.filter(function (_, rowIndex) { return rowIndex !== index; }));
       setError(null);
     }
 
     function addRow() {
+      if (props.mutationsDisabled) return;
       setRepositories(repositories.concat([""]));
       setError(null);
     }
 
     async function save() {
+      if (props.mutationsDisabled) return;
       var validation = validateRepositoryScopeRows(repositories);
       if (validation.error) {
         setError(validation.error);
@@ -1831,7 +1835,7 @@
       }
     }
 
-    var editorDisabled = busy || repositories === null;
+    var editorDisabled = busy || repositories === null || props.mutationsDisabled;
     var rows = repositories === null ? [] : repositories.map(function (repository, index) {
       var rowNumber = index + 1;
       return h(
@@ -2116,7 +2120,10 @@ if (detailsOpen) {
     }
 
     if (addon.id === "repository-scope" && enabled) {
-      children.push(h(RepositoryScopeEditor, { key: "repository-scope-editor" }));
+      children.push(h(RepositoryScopeEditor, {
+        key: "repository-scope-editor",
+        mutationsDisabled: props.mutationsDisabled,
+      }));
     }
 
     if (addon.custom) {
