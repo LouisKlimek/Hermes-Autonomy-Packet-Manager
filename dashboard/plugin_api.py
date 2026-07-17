@@ -86,6 +86,13 @@ from hapm.repo_policy import (  # noqa: E402
     remove_repository,
     replace_repositories,
 )
+from hapm.profile_env import (  # noqa: E402
+    ProfileEnvError,
+    initialize_github,
+    rollback as rollback_profile_env,
+    status as profile_env_status,
+    update as update_profile_env,
+)
 from hapm.repository_scope import (  # noqa: E402
     ADDON_ID as REPOSITORY_SCOPE_ADDON_ID,
     RepositoryScopeError,
@@ -206,6 +213,16 @@ def _require_policy_admin(request: Request) -> str | JSONResponse:
     admins = {item.strip() for item in configured.split(",") if item.strip()}
     if not actor or actor not in admins:
         return _err(403, "policy_admin_required", "a server-authenticated policy administrator is required")
+    return actor
+
+
+def _require_env_editor(request: Request | None) -> str | JSONResponse:
+    """Allow environment access only to a server-authenticated human admin."""
+    actor = _authenticated_actor(request) if request is not None else ""
+    configured = os.environ.get("HAPM_ENV_EDITORS", "ceo-orchestrator")
+    editors = {item.strip() for item in configured.split(",") if item.strip()}
+    if not actor or actor not in editors:
+        return _err(403, "environment_editor_required", "a server-authenticated environment editor is required")
     return actor
 
 
@@ -461,7 +478,7 @@ def _resolve_enable_inputs(payload: dict):
 
 
 @router.post("/addons/enable")
-def enable_addon_route(payload: dict = Body(...)):
+def enable_addon_route(payload: dict = Body(...), request: Request | None = None):
     """Enable an addon on a profile (FR-6b).
 
     Body (JSON):
@@ -490,6 +507,12 @@ def enable_addon_route(payload: dict = Body(...)):
             "bad_request",
             "Both 'profile' and 'addon' are required in the request body.",
         )
+    actor = ""
+    if addon_id == "github-agent":
+        authorization = _require_env_editor(request)
+        if isinstance(authorization, JSONResponse):
+            return authorization
+        actor = authorization
     target = str(payload.get("target", "")).strip() or profile
     mode = payload.get("mode")
     mode_id = str(mode).strip() if mode not in (None, "") else None
@@ -548,7 +571,7 @@ def enable_addon_route(payload: dict = Body(...)):
             conflict=result.to_dict(),
         )
 
-    return {
+    response = {
         "profile": profile,
         "addon": result.addon_id,
         "mode": result.mode,
@@ -557,6 +580,12 @@ def enable_addon_route(payload: dict = Body(...)):
         "skill_paths": result.skill_paths,
         "lock_path": result.lock_path,
     }
+    if addon_id == "github-agent":
+        try:
+            response["github_onboarding"] = initialize_github(pdir, _hermes_home(), profile, actor)
+        except ProfileEnvError as exc:
+            return _err(400, "github_onboarding_failed", str(exc), addon=addon_id)
+    return response
 
 
 @router.post("/addons/resolve")
@@ -714,6 +743,41 @@ def update_repository_scope(request: Request, payload: dict = Body(...)):
         )
     except RepositoryScopeError as exc:
         return _err(400, "repository_scope_invalid", str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Per-profile environment editor. Reads are live and return metadata only.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/profiles/{profile}/environment")
+def profile_environment(profile: str, request: Request):
+    authorization = _require_env_editor(request)
+    if isinstance(authorization, JSONResponse): return authorization
+    profile_dir = _resolve_profile_dir(profile)
+    if profile_dir is None: return _err(404, "profile_not_found", "profile not found", profile=profile)
+    try: return {"profile": profile, **profile_env_status(profile_dir)}
+    except ProfileEnvError as exc: return _err(400, "environment_read_failed", str(exc), profile=profile)
+
+
+@router.post("/profiles/{profile}/environment")
+def update_profile_environment(profile: str, request: Request, payload: dict = Body(...)):
+    authorization = _require_env_editor(request)
+    if isinstance(authorization, JSONResponse): return authorization
+    profile_dir = _resolve_profile_dir(profile)
+    if profile_dir is None: return _err(404, "profile_not_found", "profile not found", profile=profile)
+    try: return {"profile": profile, **update_profile_env(profile_dir, _hermes_home(), profile, authorization, payload.get("values"))}
+    except ProfileEnvError as exc: return _err(400, "environment_update_failed", str(exc), profile=profile)
+
+
+@router.post("/profiles/{profile}/environment/rollback")
+def rollback_profile_environment(profile: str, request: Request, payload: dict = Body(...)):
+    authorization = _require_env_editor(request)
+    if isinstance(authorization, JSONResponse): return authorization
+    profile_dir = _resolve_profile_dir(profile)
+    if profile_dir is None: return _err(404, "profile_not_found", "profile not found", profile=profile)
+    try: return {"profile": profile, **rollback_profile_env(profile_dir, _hermes_home(), profile, authorization, payload.get("backup_id"))}
+    except ProfileEnvError as exc: return _err(400, "environment_rollback_failed", str(exc), profile=profile)
 
 
 # ---------------------------------------------------------------------------
