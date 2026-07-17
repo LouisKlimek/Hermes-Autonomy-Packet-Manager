@@ -40,9 +40,9 @@ function createHarness(fetchImpl) {
   vm.runInNewContext(source, sandbox, { filename: sourcePath });
   return {
     components: sandbox.window.__HAPM_REPOSITORY_SCOPE_TEST__,
-    render() {
+    render(props) {
       cursor = 0;
-      return sandbox.window.__HAPM_REPOSITORY_SCOPE_TEST__.RepositoryScopeEditor();
+      return sandbox.window.__HAPM_REPOSITORY_SCOPE_TEST__.RepositoryScopeEditor(props || {});
     },
   };
 }
@@ -161,13 +161,34 @@ async function testInvalidRowsNeverIssuePutRequest() {
   assert.match(alert.props.children.join(""), /owner\/repository/);
 }
 
+async function testPreviewModeDisablesAndGuardsAllEditorMutations() {
+  let requests = 0;
+  const harness = createHarness((url, options) => {
+    if (options && options.method === "PUT") requests += 1;
+    return Promise.resolve({ ok: true, json: async () => ({ repositories: ["Acme/One"] }) });
+  });
+  harness.render({ mutationsDisabled: true });
+  await flush();
+  const tree = harness.render({ mutationsDisabled: true });
+  const input = walk(tree, (node) => node.type === "input" && node.props.value === "Acme/One");
+  const save = action(tree, "Update allowed repositories");
+  assert.equal(input.props.disabled, true);
+  assert.equal(action(tree, "+ Add repository").props.disabled, true);
+  assert.equal(save.props.disabled, true);
+  input.props.onChange({ target: { value: "Acme/Changed" } });
+  save.props.onClick();
+  await flush();
+  assert.equal(requests, 0);
+}
+
 (async () => {
   await testLoadSuccessRendersOneAccessibleRowPerRepository();
   await testRouteMismatchErrorIsSpecific();
   await testEditAddAndSaveUsesRowsThenShowsBackendNormalization();
   await testRemoveExcludesDeletedRowFromSavePayload();
   await testInvalidRowsNeverIssuePutRequest();
-  console.log("5 Repository Scope editor behavior tests passed");
+  await testPreviewModeDisablesAndGuardsAllEditorMutations();
+  console.log("6 Repository Scope editor behavior tests passed");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

@@ -176,11 +176,13 @@
     // --- §5 Addon section ------------------------------------------------
     addonsHeader: "Addons",
     addonsIntro:
-      "Reversible behavior addons for this profile. Only addons compatible with the active preset or profile are shown.",
+      "Preview the addons compatible with the selected preset. Apply the preset before changing addon state.",
     addonsLoading: "Loading addons …",
-    addonsEmpty: "No compatible addons for this profile.",
+    addonsEmpty: "No compatible addons for the selected preset.",
     addonsEmptySub:
-      "No compatible addons are currently available for this profile's active preset.",
+      "No compatible addons are currently available for the preset selected above.",
+    addonsPreviewOnly:
+      "Preview only — apply the selected preset before changing addon state.",
     addonsLoadError: "Addons could not be loaded",
     addonsLoadErrorSub: "Please try again.",
     addonOn: "On",
@@ -1324,30 +1326,17 @@
   // Right panel (a) — Preset section (§4).
   // ---------------------------------------------------------------------------
   function PresetSection(props) {
-    // props: profile, status, presets, presetsError, onApplied, onRetryPresets
+    // props: profile, status, presets, presetsError, selectedPreset,
+    //        onSelectedPresetChange, onApplied, onRetryPresets
     var status = props.status;
     var activePreset =
       status && status.active_preset ? status.active_preset : null;
 
-    var initialSlug =
-      activePreset ||
-      (props.presets && props.presets.length ? props.presets[0].slug : "");
-    var selSlugState = useState(initialSlug);
-    var selSlug = selSlugState[0];
-    var setSelSlug = selSlugState[1];
-
-    // Keep the dropdown selection sensible when the profile / preset list
-    // changes underneath us.
-    useEffect(
-      function () {
-        setSelSlug(
-          activePreset ||
-            (props.presets && props.presets.length ? props.presets[0].slug : "")
-        );
-      },
-      // eslint-disable-next-line
-      [props.profile, activePreset, (props.presets || []).length]
-    );
+    // The parent owns this selection because it is also the addon-list target.
+    // This makes the dropdown selection, not the arbitrary profile name, the
+    // single source of compatibility truth before an apply occurs.
+    var selSlug = props.selectedPreset || "";
+    var setSelSlug = props.onSelectedPresetChange;
 
     var dialogState = useState(false);
     var dialogOpen = dialogState[0];
@@ -1691,7 +1680,8 @@
   };
 
   function SegmentedControl(props) {
-    // props: segments [{key,label,disabled,hint,active}], onSelect(key), busy
+    // props: segments [{key,label,disabled,hint,active}], onSelect(key), busy,
+    //        mutationsDisabled
     return h(
       "div",
       {
@@ -1711,13 +1701,13 @@
           {
             key: seg.key,
             type: "button",
-            disabled: !!seg.disabled || props.busy || isActive,
+            disabled: !!seg.disabled || props.busy || props.mutationsDisabled || isActive,
             title: seg.hint || undefined,
-            aria: seg.disabled ? "true" : undefined,
-            "aria-disabled": seg.disabled ? "true" : undefined,
+            aria: seg.disabled || props.mutationsDisabled ? "true" : undefined,
+            "aria-disabled": seg.disabled || props.mutationsDisabled ? "true" : undefined,
             "aria-pressed": isActive ? "true" : "false",
             onClick: function () {
-              if (seg.disabled || props.busy || isActive) return;
+              if (seg.disabled || props.busy || props.mutationsDisabled || isActive) return;
               props.onSelect(seg.key);
             },
             style: {
@@ -1726,7 +1716,7 @@
               padding: "6px 12px",
               border: "none",
               borderLeft: i === 0 ? "none" : "1px solid " + C.border,
-              cursor: seg.disabled
+              cursor: seg.disabled || props.mutationsDisabled
                 ? "not-allowed"
                 : isActive || props.busy
                 ? "default"
@@ -1777,7 +1767,7 @@
     return fallback;
   }
 
-  function RepositoryScopeEditor() {
+  function RepositoryScopeEditor(props) {
     var repositoriesState = useState(null);
     var repositories = repositoriesState[0];
     var setRepositories = repositoriesState[1];
@@ -1804,6 +1794,7 @@
     }, []);
 
     function updateRow(index, value) {
+      if (props.mutationsDisabled) return;
       setRepositories(repositories.map(function (repository, rowIndex) {
         return rowIndex === index ? value : repository;
       }));
@@ -1811,16 +1802,19 @@
     }
 
     function removeRow(index) {
+      if (props.mutationsDisabled) return;
       setRepositories(repositories.filter(function (_, rowIndex) { return rowIndex !== index; }));
       setError(null);
     }
 
     function addRow() {
+      if (props.mutationsDisabled) return;
       setRepositories(repositories.concat([""]));
       setError(null);
     }
 
     async function save() {
+      if (props.mutationsDisabled) return;
       var validation = validateRepositoryScopeRows(repositories);
       if (validation.error) {
         setError(validation.error);
@@ -1841,7 +1835,7 @@
       }
     }
 
-    var editorDisabled = busy || repositories === null;
+    var editorDisabled = busy || repositories === null || props.mutationsDisabled;
     var rows = repositories === null ? [] : repositories.map(function (repository, index) {
       var rowNumber = index + 1;
       return h(
@@ -1878,8 +1872,8 @@
   }
 
   function AddonRow(props) {
-    // props: addon, profile, target, busy, activeMode, onEnable(addon, modeId),
-    //        onDisable(addon)
+    // props: addon, profile, target, busy, mutationsDisabled, activeMode,
+    //        onEnable(addon, modeId), onDisable(addon)
     var addon = props.addon;
     var enabled = !!addon.enabled;
     var modes = addon.modes || [];
@@ -1994,9 +1988,9 @@
                   (addon.name || addon.id) +
                   " " +
                   (enabled ? COPY.addonOn : COPY.addonOff),
-                disabled: props.busy,
+                disabled: props.busy || props.mutationsDisabled,
                 onClick: function () {
-                  if (props.busy) return;
+                  if (props.busy || props.mutationsDisabled) return;
                   if (enabled) props.onDisable(addon);
                   else props.onEnable(addon, undefined);
                 },
@@ -2008,8 +2002,8 @@
                   border: "1px solid " + C.border,
                   background: enabled ? C.accent : "rgba(255,255,255,0.10)",
                   position: "relative",
-                  cursor: props.busy ? "default" : "pointer",
-                  opacity: props.busy ? 0.6 : 1,
+                  cursor: props.busy || props.mutationsDisabled ? "default" : "pointer",
+                  opacity: props.busy || props.mutationsDisabled ? 0.6 : 1,
                   transition: "background 0.15s",
                   padding: 0,
                 },
@@ -2085,8 +2079,9 @@
           h(SegmentedControl, {
             segments: segments,
             busy: props.busy,
+            mutationsDisabled: props.mutationsDisabled,
             onSelect: function (key) {
-              if (props.busy) return;
+              if (props.busy || props.mutationsDisabled) return;
               if (key === "__off__") {
                 if (enabled) props.onDisable(addon);
                 return;
@@ -2125,7 +2120,10 @@ if (detailsOpen) {
     }
 
     if (addon.id === "repository-scope" && enabled) {
-      children.push(h(RepositoryScopeEditor, { key: "repository-scope-editor" }));
+      children.push(h(RepositoryScopeEditor, {
+        key: "repository-scope-editor",
+        mutationsDisabled: props.mutationsDisabled,
+      }));
     }
 
     if (addon.custom) {
@@ -2154,8 +2152,9 @@ if (detailsOpen) {
   }
 
   function AddonSection(props) {
-    // props: profile, target, activePreset, addons, loading, error, errorNode, busyAddonId,
-    //        activeModes (id->mode), onEnable, onDisable, onRetry
+    // props: profile, target, activePreset, selectedPreset, mutationsDisabled,
+    //        addons, loading, error, errorNode, busyAddonId, activeModes (id->mode),
+    //        onEnable, onDisable, onRetry
     var activePreset = props.activePreset || null;
     var children = [
       h(
@@ -2185,6 +2184,20 @@ if (detailsOpen) {
         COPY.addonsIntro
       ),
     ];
+
+    if (props.mutationsDisabled) {
+      children.push(
+        h(
+          "div",
+          {
+            key: "preview-only",
+            role: "status",
+            style: { fontSize: 12.5, opacity: 0.75, marginBottom: 12 },
+          },
+          COPY.addonsPreviewOnly
+        )
+      );
+    }
 
     // Toggle error banner (incompatibility / conflict / generic).
     if (props.errorNode) {
@@ -2279,6 +2292,7 @@ if (detailsOpen) {
             activePreset: activePreset,
             activeMode: props.activeModes ? props.activeModes[addon.id] : null,
             busy: props.busyAddonId === addon.id,
+            mutationsDisabled: props.mutationsDisabled,
             onEnable: props.onEnable,
             onDisable: props.onDisable,
           })
@@ -2480,6 +2494,12 @@ if (detailsOpen) {
     var selected = selectedState[0];
     var setSelected = selectedState[1];
 
+    // Pair the dropdown selection with its profile so a quick profile switch
+    // never reuses a prior profile's preset as a compatibility target.
+    var selectedPresetState = useState({ profile: null, slug: "" });
+    var selectedPresetSelection = selectedPresetState[0];
+    var setSelectedPresetSelection = selectedPresetState[1];
+
     var statusesState = useState({}); // name -> status object
     var statuses = statusesState[0];
     var setStatuses = statusesState[1];
@@ -2607,9 +2627,9 @@ if (detailsOpen) {
         });
     }, []);
 
-    var loadAddons = useCallback(function (profileName) {
+    var loadAddons = useCallback(function (profileName, presetSlug) {
       var requestSequence = ++addonRequestSequence.current;
-      if (!profileName) {
+      if (!profileName || !presetSlug) {
         setAddons([]);
         setAddonsLoading(false);
         setAddonsErr(null);
@@ -2619,7 +2639,7 @@ if (detailsOpen) {
       setAddonsErr(null);
       var q =
         "/addons?target=" +
-        encodeURIComponent(profileName) +
+        encodeURIComponent(presetSlug) +
         "&profile=" +
         encodeURIComponent(profileName);
       return apiGet(q)
@@ -2644,12 +2664,37 @@ if (detailsOpen) {
       [loadProfiles, loadPresets]
     );
 
-    // (Re)load the addon list whenever the selected profile changes.
+    var selectedStatus = selected ? statuses[selected] : null;
+    var defaultPresetSlug =
+      (selectedStatus && selectedStatus.active_preset) ||
+      (presets.length ? presets[0].slug : "");
+    var selectedPreset =
+      selectedPresetSelection.profile === selected
+        ? selectedPresetSelection.slug
+        : defaultPresetSlug;
+    var addonMutationsDisabled =
+      !selectedStatus ||
+      !selectedStatus.active_preset ||
+      selectedPreset !== selectedStatus.active_preset;
+
+    // Reset the profile-bound dropdown selection when the profile or its active
+    // preset changes. The derived target above remains correct during this
+    // effect's transition, so no request can use the previous profile name.
     useEffect(
       function () {
-        if (selected) loadAddons(selected);
+        setSelectedPresetSelection({ profile: selected, slug: defaultPresetSlug });
       },
-      [selected, loadAddons]
+      [selected, defaultPresetSlug]
+    );
+
+    // (Re)load the addon preview whenever either selected profile or dropdown
+    // preset changes. `target` is always the preset slug; `profile` is used only
+    // to annotate currently enabled addons from that profile's lock.
+    useEffect(
+      function () {
+        if (selected) loadAddons(selected, selectedPreset);
+      },
+      [selected, selectedPreset, loadAddons]
     );
 
     var onApplied = useCallback(
@@ -2658,14 +2703,14 @@ if (detailsOpen) {
         // toast (§7.2). Applying a preset can change addon compatibility.
         if (selected) {
           fetchStatus(selected);
-          loadAddons(selected);
+          loadAddons(selected, selectedPreset);
         }
         setToast(true);
         setTimeout(function () {
           setToast(false);
         }, 7000);
       },
-      [selected, fetchStatus, loadAddons]
+      [selected, selectedPreset, fetchStatus, loadAddons]
     );
 
     // Map an addon id to its human-readable display name using the loaded
@@ -2689,17 +2734,17 @@ if (detailsOpen) {
     // §5 addon enable handler. `modeId` is passed for modal addons (e.g. YAGNI).
     var onEnableAddon = useCallback(
       function (addon, modeId) {
-        if (!selected) return;
+        if (!selected || addonMutationsDisabled) return;
         setBusyAddon(addon.id);
         setAddonToggleErr(null);
-        var payload = { profile: selected, addon: addon.id, target: selected };
+        var payload = { profile: selected, addon: addon.id, target: selectedPreset };
         if (modeId) payload.mode = modeId;
         apiPost("/addons/enable", payload)
           .then(function () {
             setBusyAddon(null);
             // Refresh from the source of truth after the toggle (§5 AC).
             fetchStatus(selected);
-            loadAddons(selected);
+            loadAddons(selected, selectedPreset);
             setToast(true);
             setTimeout(function () {
               setToast(false);
@@ -2729,7 +2774,7 @@ if (detailsOpen) {
               setConflictBusy(false);
               setConflictDialog({
                 addon: addon,
-                target: selected,
+                target: selectedPreset,
                 mode: modeId || null,
                 conflicts: rows,
               });
@@ -2738,7 +2783,7 @@ if (detailsOpen) {
             setAddonToggleErr(addonToggleErrorNode(err, addon, selected));
           });
       },
-      [selected, fetchStatus, loadAddons, addonDisplayName]
+      [selected, selectedPreset, addonMutationsDisabled, fetchStatus, loadAddons, addonDisplayName]
     );
 
     // v1.1: confirmed guided resolution. Fires exactly ONE atomic call to
@@ -2748,7 +2793,7 @@ if (detailsOpen) {
     // and the two buttons are restored for retry.
     var onConfirmConflict = useCallback(
       function () {
-        if (!conflictDialog || !selected) return;
+        if (!conflictDialog || !selected || addonMutationsDisabled) return;
         var addon = conflictDialog.addon;
         setConflictBusy(true);
         setConflictErr(null);
@@ -2781,7 +2826,7 @@ if (detailsOpen) {
             }, 5000);
             // Re-render addon list + status from the source of truth.
             fetchStatus(selected);
-            loadAddons(selected);
+            loadAddons(selected, selectedPreset);
           })
           .catch(function () {
             // Atomic backend guarantees nothing was applied on failure.
@@ -2795,7 +2840,7 @@ if (detailsOpen) {
             );
           });
       },
-      [conflictDialog, selected, fetchStatus, loadAddons, addonDisplayName]
+      [conflictDialog, selected, selectedPreset, addonMutationsDisabled, fetchStatus, loadAddons, addonDisplayName]
     );
 
     // v1.1: cancel — close the dialog, no API call, no state change.
@@ -2808,14 +2853,14 @@ if (detailsOpen) {
     // §5 addon disable handler.
     var onDisableAddon = useCallback(
       function (addon) {
-        if (!selected) return;
+        if (!selected || addonMutationsDisabled) return;
         setBusyAddon(addon.id);
         setAddonToggleErr(null);
         apiPost("/addons/disable", { profile: selected, addon: addon.id })
           .then(function () {
             setBusyAddon(null);
             fetchStatus(selected);
-            loadAddons(selected);
+            loadAddons(selected, selectedPreset);
             setToast(true);
             setTimeout(function () {
               setToast(false);
@@ -2826,10 +2871,8 @@ if (detailsOpen) {
             setAddonToggleErr(addonToggleErrorNode(err, addon, selected));
           });
       },
-      [selected, fetchStatus, loadAddons]
+      [selected, selectedPreset, addonMutationsDisabled, fetchStatus, loadAddons]
     );
-
-    var selectedStatus = selected ? statuses[selected] : null;
 
     // Map active addon -> its current mode (from live status) so the segmented
     // control reflects reality after a refresh.
@@ -2983,13 +3026,19 @@ if (detailsOpen) {
                   status: selectedStatus,
                   presets: presets,
                   presetsError: presetsErr,
+                  selectedPreset: selectedPreset,
+                  onSelectedPresetChange: function (slug) {
+                    setSelectedPresetSelection({ profile: selected, slug: slug });
+                  },
                   onApplied: onApplied,
                   onRetryPresets: loadPresets,
                 }),
                 h(AddonSection, {
                   profile: selected,
-                  target: selected,
+                  target: selectedPreset,
                   activePreset: selectedStatus && selectedStatus.active_preset,
+                  selectedPreset: selectedPreset,
+                  mutationsDisabled: addonMutationsDisabled,
                   addons: addons,
                   loading: addonsLoading,
                   error: addonsErr,
@@ -2999,7 +3048,7 @@ if (detailsOpen) {
                   onEnable: onEnableAddon,
                   onDisable: onDisableAddon,
                   onRetry: function () {
-                    if (selected) loadAddons(selected);
+                    if (selected) loadAddons(selected, selectedPreset);
                   },
                 }),
                 h(StatusView, {
