@@ -1747,13 +1747,40 @@
     );
   }
 
+  var REPOSITORY_SCOPE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,38}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+
+  function validateRepositoryScopeRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { error: "Add at least one GitHub owner/repository before saving." };
+    }
+    var repositories = [];
+    for (var index = 0; index < rows.length; index += 1) {
+      var repository = typeof rows[index] === "string" ? rows[index].trim() : "";
+      if (!repository) {
+        return { error: "Repository " + (index + 1) + " is empty. Enter an owner/repository name or remove the row." };
+      }
+      if (!REPOSITORY_SCOPE_PATTERN.test(repository)) {
+        return { error: "Repository " + (index + 1) + " must use the GitHub owner/repository format." };
+      }
+      repositories.push(repository);
+    }
+    return { repositories: repositories };
+  }
+
+  function repositoryScopeErrorMessage(err, fallback) {
+    if (err && err.body && typeof err.body.message === "string" && err.body.message) {
+      return err.body.message;
+    }
+    if (err && err.status === 404) {
+      return "The installed HAPM dashboard backend does not provide Repository Scope (HTTP 404). The dashboard is serving a frontend/backend version mismatch; update the installed plugin so its dashboard API and bundle come from the same release, then restart the dashboard.";
+    }
+    return fallback;
+  }
+
   function RepositoryScopeEditor() {
     var repositoriesState = useState(null);
     var repositories = repositoriesState[0];
     var setRepositories = repositoriesState[1];
-    var textState = useState("");
-    var text = textState[0];
-    var setText = textState[1];
     var errorState = useState(null);
     var error = errorState[0];
     var setError = errorState[1];
@@ -1765,45 +1792,88 @@
       var cancelled = false;
       apiGet("/repository-scope").then(function (result) {
         if (cancelled) return;
-        var items = result.repositories || [];
-        setRepositories(items);
-        setText(items.join("\n"));
+        if (!result || !Array.isArray(result.repositories)) {
+          setError("The Repository Scope backend returned an invalid response.");
+          return;
+        }
+        setRepositories(result.repositories);
       }).catch(function (err) {
-        if (!cancelled) setError((err.body && err.body.message) || "Could not load the shared repository scope.");
+        if (!cancelled) setError(repositoryScopeErrorMessage(err, "Could not load the shared repository scope."));
       });
       return function () { cancelled = true; };
     }, []);
 
+    function updateRow(index, value) {
+      setRepositories(repositories.map(function (repository, rowIndex) {
+        return rowIndex === index ? value : repository;
+      }));
+      setError(null);
+    }
+
+    function removeRow(index) {
+      setRepositories(repositories.filter(function (_, rowIndex) { return rowIndex !== index; }));
+      setError(null);
+    }
+
+    function addRow() {
+      setRepositories(repositories.concat([""]));
+      setError(null);
+    }
+
     async function save() {
-      var items = text.split("\n").map(function (item) { return item.trim(); }).filter(Boolean);
+      var validation = validateRepositoryScopeRows(repositories);
+      if (validation.error) {
+        setError(validation.error);
+        return;
+      }
       setBusy(true);
       setError(null);
       try {
-        var result = await apiPut("/repository-scope", { repositories: items });
-        setRepositories(result.repositories || items);
-        setText((result.repositories || items).join("\n"));
+        var result = await apiPut("/repository-scope", { repositories: validation.repositories });
+        if (!result || !Array.isArray(result.repositories)) {
+          throw new Error("invalid_repository_scope_response");
+        }
+        setRepositories(result.repositories);
       } catch (err) {
-        setError((err.body && err.body.message) || "Could not update the shared repository scope.");
+        setError(repositoryScopeErrorMessage(err, "Could not update the shared repository scope."));
       } finally {
         setBusy(false);
       }
     }
 
+    var editorDisabled = busy || repositories === null;
+    var rows = repositories === null ? [] : repositories.map(function (repository, index) {
+      var rowNumber = index + 1;
+      return h(
+        "div",
+        { key: "repository-" + index, style: { display: "flex", gap: 8, alignItems: "end", marginTop: 8 } },
+        h(
+          "label",
+          { style: { flex: 1, minWidth: 0, fontSize: 12, color: C.textDim } },
+          "Repository " + rowNumber,
+          h("input", {
+            type: "text",
+            value: repository,
+            disabled: editorDisabled,
+            onChange: function (e) { updateRow(index, e.target.value); },
+            "aria-label": "Repository " + rowNumber,
+            placeholder: "owner/repository",
+            style: { boxSizing: "border-box", display: "block", width: "100%", marginTop: 4, padding: 8, borderRadius: 7, border: "1px solid " + C.border, background: C.bg, color: C.text, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 },
+          })
+        ),
+        h("button", { type: "button", disabled: editorDisabled, onClick: function () { removeRow(index); }, "aria-label": "Remove repository " + rowNumber, style: { padding: "8px 10px", borderRadius: 7, border: "1px solid " + C.border, background: C.panel, color: C.text, cursor: editorDisabled ? "not-allowed" : "pointer", fontFamily: "inherit" } }, "Remove")
+      );
+    });
+
     return h(
       "div",
       { style: { marginTop: 12, paddingTop: 12, borderTop: "1px solid " + C.border } },
       h("div", { style: { fontSize: 12.5, fontWeight: 600 } }, "Allowed repositories (shared)"),
-      h("div", { style: { fontSize: 12, opacity: 0.7, marginTop: 3, lineHeight: 1.45 } }, "One GitHub owner/repository per line. Saving updates every profile where Repository Scope is active."),
-      h("textarea", {
-        value: text,
-        disabled: busy || repositories === null,
-        onChange: function (e) { setText(e.target.value); },
-        "aria-label": "Allowed repositories",
-        rows: Math.max(3, (repositories || []).length + 1),
-        style: { boxSizing: "border-box", width: "100%", marginTop: 8, padding: 8, borderRadius: 7, border: "1px solid " + C.border, background: C.bg, color: C.text, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, resize: "vertical" },
-      }),
-      error ? h("div", { role: "alert", style: { color: C.danger, fontSize: 12, marginTop: 6 } }, error) : null,
-      h(Button, { kind: "secondary", disabled: busy || repositories === null, onClick: save, style: { marginTop: 8 } }, busy ? "Saving…" : "Update allowed repositories")
+      h("div", { style: { fontSize: 12, opacity: 0.7, marginTop: 3, lineHeight: 1.45 } }, "Add one GitHub owner/repository per row. Saving updates every profile where Repository Scope is active."),
+      rows,
+      h("button", { type: "button", disabled: editorDisabled, onClick: addRow, style: { marginTop: 8, padding: "7px 10px", borderRadius: 7, border: "1px solid " + C.border, background: C.panel, color: C.text, cursor: editorDisabled ? "not-allowed" : "pointer", fontFamily: "inherit" } }, "+ Add repository"),
+      error ? h("div", { role: "alert", "aria-live": "polite", style: { color: C.danger, fontSize: 12, marginTop: 6 } }, error) : null,
+      h(Button, { kind: "secondary", disabled: editorDisabled, onClick: save, style: { marginTop: 8 } }, busy ? "Saving…" : "Update allowed repositories")
     );
   }
 
