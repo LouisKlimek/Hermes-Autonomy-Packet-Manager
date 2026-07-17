@@ -1,0 +1,14 @@
+{
+  "id": "fullstack-developer-governance",
+  "name": "Fullstack Developer Operating Governance",
+  "description": "Selectable current operating policy derived from the live fullstack-developer SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "fullstack-developer"
+  ],
+  "conflicts_with": []
+}

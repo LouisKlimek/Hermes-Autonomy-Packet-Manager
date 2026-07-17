@@ -1,10 +1,10 @@
 {
   "slug": "designer",
   "name": "Designer",
-  "description": "Produces developer-verifiable product UI/UX specifications without implementing them.",
-  "version": "2.0.0",
+  "description": "Creates product UI/UX specifications and developer-verifiable acceptance criteria without implementing production code.",
+  "version": "3.0.0",
   "compatibleAddons": [
-    "designer-specification-governance",
+    "designer-governance",
     "postmerge-no-qa-deploy",
     "yagni"
   ],

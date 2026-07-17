@@ -1,9 +1,0 @@
-{
-  "id": "repository-scope",
-  "name": "Repository Scope (deprecated)",
-  "description": "Deprecated; migrate to github-agent and the canonical repository policy.",
-  "version": "1.1.0",
-  "contributes": {"soul_block": true, "skills": false},
-  "compatible_profiles_or_presets": ["fullstack-developer"],
-  "deprecated_by": "github-agent"
-}

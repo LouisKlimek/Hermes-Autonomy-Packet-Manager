@@ -1,0 +1,14 @@
+{
+  "id": "prd-bridge-governance",
+  "name": "PRD Bridge Operating Governance",
+  "description": "Selectable current operating policy derived from the live prd-bridge SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "prd-bridge"
+  ],
+  "conflicts_with": []
+}

@@ -1,0 +1,14 @@
+{
+  "id": "github-manager-governance",
+  "name": "GitHub Manager Operating Governance",
+  "description": "Selectable current operating policy derived from the live github-manager SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "github-manager"
+  ],
+  "conflicts_with": []
+}

@@ -1,0 +1,14 @@
+{
+  "id": "technical-feasibility-reviewer-governance",
+  "name": "Technical Feasibility Reviewer Operating Governance",
+  "description": "Selectable current operating policy derived from the live technical-feasibility-reviewer SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "technical-feasibility-reviewer"
+  ],
+  "conflicts_with": []
+}

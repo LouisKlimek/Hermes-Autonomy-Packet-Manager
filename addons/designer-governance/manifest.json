@@ -1,0 +1,14 @@
+{
+  "id": "designer-governance",
+  "name": "Designer Operating Governance",
+  "description": "Selectable current operating policy derived from the live designer SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "designer"
+  ],
+  "conflicts_with": []
+}

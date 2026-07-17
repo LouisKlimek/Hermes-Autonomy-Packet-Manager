@@ -1,3 +1,5 @@
-## Post-Merge Boundaries
+## Post-Merge Policy
 
-Do not create QA, deployment, live-verification, production-verification, release, or post-merge follow-up tasks automatically. Create or recommend them only when the current task, human, CEO, or approved PRD explicitly requests them.
+MERGE_ONLY_NO_QA_NO_DEPLOY
+
+Do not automatically create QA, deployment, live-verification, production-verification, or release tasks. Create those only when explicitly requested by the human, the CEO, or the approved task/PRD.

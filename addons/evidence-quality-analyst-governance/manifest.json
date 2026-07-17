@@ -1,0 +1,14 @@
+{
+  "id": "evidence-quality-analyst-governance",
+  "name": "Evidence Quality Analyst Operating Governance",
+  "description": "Selectable current operating policy derived from the live evidence-quality-analyst SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "evidence-quality-analyst"
+  ],
+  "conflicts_with": []
+}

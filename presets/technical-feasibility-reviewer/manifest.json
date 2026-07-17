@@ -2,10 +2,9 @@
   "slug": "technical-feasibility-reviewer",
   "name": "Technical Feasibility Reviewer",
   "description": "Assesses technical viability and implementation risk for CEO decisions.",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "compatibleAddons": [
-    "technical-feasibility-governance",
-    "workflow-context-governance"
+    "technical-feasibility-reviewer-governance"
   ],
   "markers": [
     "feasibility",

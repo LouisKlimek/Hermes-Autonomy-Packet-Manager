@@ -1,0 +1,14 @@
+{
+  "id": "pr-reviewer-governance",
+  "name": "PR Reviewer Operating Governance",
+  "description": "Selectable current operating policy derived from the live pr-reviewer SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "pr-reviewer"
+  ],
+  "conflicts_with": []
+}
