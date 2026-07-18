@@ -1,0 +1,10 @@
+{
+  "slug": "default",
+  "name": "General Assistant",
+  "description": "A helpful, direct general-purpose Hermes assistant.",
+  "version": "3.0.0",
+  "compatibleAddons": [],
+  "markers": [
+    "general-assistant"
+  ]
+}

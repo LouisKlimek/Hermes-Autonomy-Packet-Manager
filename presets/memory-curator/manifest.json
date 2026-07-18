@@ -1,11 +1,10 @@
 {
   "slug": "memory-curator",
   "name": "Memory Curator",
-  "description": "Curates stable memory proposals while preventing memory pollution.",
-  "version": "2.0.0",
+  "description": "Curates stable, high-signal memory while preventing memory pollution.",
+  "version": "3.0.0",
   "compatibleAddons": [
-    "memory-curation-governance",
-    "workflow-context-governance"
+    "memory-curator-governance"
   ],
   "markers": [
     "memory",

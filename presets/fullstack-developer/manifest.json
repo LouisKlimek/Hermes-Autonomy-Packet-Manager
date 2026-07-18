@@ -1,8 +1,16 @@
 {
   "slug": "fullstack-developer",
   "name": "Fullstack Developer",
-  "description": "Role-only preset for implementing scoped software work through reviewable pull requests.",
-  "version": "1.2.0",
-  "compatibleAddons": ["github-agent", "low-token-implementation", "yagni"],
-  "markers": ["engineering", "implementation", "github"]
+  "description": "Implements scoped software work in reviewable pull requests without merging its own work.",
+  "version": "3.0.0",
+  "compatibleAddons": [
+    "fullstack-developer-governance",
+    "postmerge-no-qa-deploy",
+    "yagni"
+  ],
+  "markers": [
+    "engineering",
+    "implementation",
+    "github"
+  ]
 }

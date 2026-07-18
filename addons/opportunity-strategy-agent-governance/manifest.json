@@ -1,0 +1,14 @@
+{
+  "id": "opportunity-strategy-agent-governance",
+  "name": "Opportunity Strategy Agent Operating Governance",
+  "description": "Selectable current operating policy derived from the live opportunity-strategy-agent SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "opportunity-strategy-agent"
+  ],
+  "conflicts_with": []
+}

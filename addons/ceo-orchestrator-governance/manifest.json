@@ -1,0 +1,14 @@
+{
+  "id": "ceo-orchestrator-governance",
+  "name": "CEO Orchestrator Operating Governance",
+  "description": "Selectable current operating policy derived from the live ceo-orchestrator SOUL.",
+  "version": "3.0.0",
+  "contributes": {
+    "soul_block": true,
+    "skills": false
+  },
+  "compatible_profiles_or_presets": [
+    "ceo-orchestrator"
+  ],
+  "conflicts_with": []
+}

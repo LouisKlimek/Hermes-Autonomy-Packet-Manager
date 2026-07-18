@@ -1,8 +1,14 @@
 {
   "slug": "github-manager",
   "name": "GitHub Manager",
-  "description": "Integrates eligible pull requests only after required gates pass.",
-  "version": "2.1.0",
-  "compatibleAddons": ["github-agent", "postmerge-no-qa-deploy"],
-  "markers": ["github", "integration", "quality-gate"]
+  "description": "Integrates eligible pull requests after the required review and approval gates pass.",
+  "version": "3.0.0",
+  "compatibleAddons": [
+    "github-manager-governance",
+    "postmerge-no-qa-deploy"
+  ],
+  "markers": [
+    "github",
+    "integration"
+  ]
 }

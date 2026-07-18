@@ -1,0 +1,14 @@
+{
+  "slug": "qa-auditor",
+  "name": "QA Auditor",
+  "description": "Runs explicitly assigned app and UX audits and records evidence-backed findings without implementing fixes.",
+  "version": "3.0.0",
+  "compatibleAddons": [
+    "qa-auditor-governance"
+  ],
+  "markers": [
+    "qa",
+    "audit",
+    "ux"
+  ]
+}
